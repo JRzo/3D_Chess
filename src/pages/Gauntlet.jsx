@@ -7,8 +7,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Navbar } from '../components/Navbar';
 import { BOT_LEVELS } from '../lib/bot';
+import { GAUNTLET_KEY } from '../lib/constants';
 
-const STORAGE_KEY = 'chess3d-gauntlet';
+const STORAGE_KEY = GAUNTLET_KEY;
 
 function getProgress() {
   try { return parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10); }
