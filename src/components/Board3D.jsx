@@ -15,10 +15,11 @@ export function Board3D({ selectedSquare, validMoves, pieces, lastMove, onSquare
         const isValid = validMoves.includes(square);
         const isLastFrom = lastMove?.from === square;
         const isLastTo = lastMove?.to === square;
-        let color = isLight ? '#d9c4a6' : '#5b3a29';
-        if (isSelected) color = '#6ee7b7';
-        else if (isValid) color = isLight ? '#9dd896' : '#4e8c47';
-        else if (isLastFrom || isLastTo) color = isLight ? '#e8da7a' : '#b8a830';
+        // Classical: light = cream, dark = deep mahogany
+        let color = isLight ? '#f0d9b5' : '#b58863';
+        if (isSelected) color = '#f6f669';
+        else if (isValid) color = isLight ? '#cdd16b' : '#aaa23a';
+        else if (isLastFrom || isLastTo) color = isLight ? '#cdd16b' : '#aaa23a';
         return { col, row, square, color, isValid };
       })
     );
@@ -29,11 +30,11 @@ export function Board3D({ selectedSquare, validMoves, pieces, lastMove, onSquare
       {/* Board base */}
       <mesh position={[0, -0.18, 0]} receiveShadow>
         <boxGeometry args={[8.6, 0.36, 8.6]} />
-        <meshStandardMaterial color="#2d1608" metalness={0.15} roughness={0.85} />
+        <meshStandardMaterial color="#5a3518" metalness={0.1} roughness={0.9} />
       </mesh>
       <mesh position={[0, -0.01, 0]} receiveShadow>
         <boxGeometry args={[8.4, 0.04, 8.4]} />
-        <meshStandardMaterial color="#4a2810" metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial color="#7a5230" metalness={0.05} roughness={0.95} />
       </mesh>
 
       {squares.map(({ col, row, square, color, isValid }) => (
@@ -49,7 +50,7 @@ export function Board3D({ selectedSquare, validMoves, pieces, lastMove, onSquare
           {isValid && (
             <mesh position={[col - 3.5, 0.06, row - 3.5]}>
               <cylinderGeometry args={[0.18, 0.18, 0.025, 20]} />
-              <meshStandardMaterial color="#6ee7b7" emissive="#6ee7b7" emissiveIntensity={0.7} transparent opacity={0.8} />
+              <meshStandardMaterial color="#f6f669" emissive="#aaa23a" emissiveIntensity={0.4} transparent opacity={0.75} />
             </mesh>
           )}
         </group>
