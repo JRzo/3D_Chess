@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stars } from '@react-three/drei';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -10,22 +10,31 @@ import { AchievementPopup } from '../components/AchievementPopup';
 import { Navbar } from '../components/Navbar';
 import { soundManager } from '../lib/sounds';
 import { getBotMove, BOT_LEVELS } from '../lib/bot';
+import { detectOpening } from '../lib/openings';
 import api from '../lib/api';
 
-const PIECE_SYM   = { p:'♟', r:'♜', n:'♞', b:'♝', q:'♛', k:'♚' };  // black pieces
-const PIECE_SYM_W = { p:'♙', r:'♖', n:'♘', b:'♗', q:'♕', k:'♔' };  // white pieces
+const PIECE_SYM   = { p:'♟', r:'♜', n:'♞', b:'♝', q:'♛', k:'♚' };
+const PIECE_SYM_W = { p:'♙', r:'♖', n:'♘', b:'♗', q:'♕', k:'♔' };
 
 const TIME_OPTIONS = [
-  { label: '1 min',  seconds: 60 },
-  { label: '3 min',  seconds: 180 },
-  { label: '5 min',  seconds: 300 },
-  { label: '10 min', seconds: 600 },
-  { label: '∞',      seconds: 0 },
+  { label: 'Bullet · 1 min',  seconds: 60,  tag: '⚡' },
+  { label: 'Bullet · 2 min',  seconds: 120, tag: '⚡' },
+  { label: 'Blitz · 3 min',   seconds: 180, tag: '🔥' },
+  { label: 'Blitz · 5 min',   seconds: 300, tag: '🔥' },
+  { label: 'Rapid · 10 min',  seconds: 600, tag: '⏱' },
+  { label: 'Unlimited',       seconds: 0,   tag: '∞'  },
 ];
+
+function getTimeLabel(seconds) {
+  if (seconds === 0) return 'Unlimited';
+  if (seconds <= 120) return `⚡ Bullet`;
+  if (seconds <= 300) return `🔥 Blitz`;
+  return `⏱ Rapid`;
+}
 
 function fmt(s) {
   if (s === 0 || s === null) return '∞';
-  const m = Math.floor(s / 60);
+  const m   = Math.floor(s / 60);
   const sec = s % 60;
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
@@ -38,12 +47,14 @@ function Clock({ seconds, active, flagged }) {
   );
 }
 
-const RANK_COLORS = { Legend:'#ffd700', Platinum:'#c8dde8', Gold:'#ffd700', Silver:'#c0c0c0', Bronze:'#cd7f32' };
+const RANK_COLORS = { Legend:'#a855f7', Platinum:'#38bdf8', Gold:'#f59e0b', Silver:'#c0c0c0', Bronze:'#cd7f32' };
+const GAUNTLET_KEY = 'chess3d-gauntlet';
 
 export function GamePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const difficulty  = parseInt(searchParams.get('difficulty') || '0', 10);
+  const isGauntlet  = searchParams.get('gauntlet') === '1';
   const isBotGame   = difficulty > 0;
   const botInfo     = BOT_LEVELS.find(b => b.level === difficulty);
 
@@ -51,27 +62,60 @@ export function GamePage() {
   const [gameId, setGameId]               = useState(null);
   const [showTutorial, setShowTutorial]   = useState(user?.settings?.showTutorial ?? true);
   const [achievement, setAchievement]     = useState(null);
-  const [capturedByWhite, setCapturedByWhite] = useState([]); // black pieces captured by white
-  const [capturedByBlack, setCapturedByBlack] = useState([]); // white pieces captured by black
+  const [capturedByWhite, setCapturedByWhite] = useState([]);
+  const [capturedByBlack, setCapturedByBlack] = useState([]);
   const [showGameOver, setShowGameOver]   = useState(false);
   const [botThinking, setBotThinking]     = useState(false);
   const [saveError, setSaveError]         = useState(false);
-  const [timeControl, setTimeControl]     = useState(300);        // seconds per side, 0 = infinite
+  const [timeControl, setTimeControl]     = useState(300);
   const [timeWhite, setTimeWhite]         = useState(300);
   const [timeBlack, setTimeBlack]         = useState(300);
   const [timerRunning, setTimerRunning]   = useState(false);
-  const [flagged, setFlagged]             = useState(null);       // 'w' or 'b'
+  const [flagged, setFlagged]             = useState(null);
   const [showTimeSelect, setShowTimeSelect] = useState(false);
-  const prevHistLen = useRef(0);
-  const botTimeout  = useRef(null);
-  const timerRef    = useRef(null);
+
+  // ── New feature state ────────────────────────────────────────────────
+  const [hintMove, setHintMove]           = useState(null);
+  const [hintLoading, setHintLoading]     = useState(false);
+  const [showResignConfirm, setShowResignConfirm] = useState(false);
+  const [copied, setCopied]               = useState(false);
+
+  const prevHistLen  = useRef(0);
+  const botTimeout   = useRef(null);
+  const timerRef     = useRef(null);
+  const hintTimer    = useRef(null);
+  const moveHistRef  = useRef(null);
+  // Tracks bot's turn synchronously — prevents stale-state double-move.
+  const botTurnRef   = useRef(false);
 
   const {
     fen, selectedSquare, validMoves, lastMove, gameOver,
     history, selectSquare, makeMove, resetGame, getPieces, isCheck, turn, chess,
   } = useChess();
 
-  // ── Timer tick ──────────────────────────────────────────────────────────
+  // ── Material advantage ───────────────────────────────────────────────
+  const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+  const materialAdv = useMemo(() => {
+    let w = 0, b = 0;
+    capturedByWhite.forEach(p => { w += PIECE_VALUES[p] || 0; });
+    capturedByBlack.forEach(p => { b += PIECE_VALUES[p] || 0; });
+    return w - b; // positive = white ahead
+  }, [capturedByWhite, capturedByBlack]);
+
+  // ── Detect opening name ──────────────────────────────────────────────
+  const openingName = useMemo(() => {
+    if (history.length === 0) return null;
+    return detectOpening(history.map(m => m.san));
+  }, [history]);
+
+  // ── Move history auto-scroll ─────────────────────────────────────────
+  useEffect(() => {
+    if (moveHistRef.current) {
+      moveHistRef.current.scrollTop = moveHistRef.current.scrollHeight;
+    }
+  }, [history.length]);
+
+  // ── Timer tick ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!timerRunning || timeControl === 0 || gameOver || flagged) return;
     timerRef.current = setInterval(() => {
@@ -99,26 +143,21 @@ export function GamePage() {
       const winner = flagged === 'w' ? 'black' : 'white';
       api.post(`/games/${gameId}/complete`, {
         result: winner, resultReason: 'timeout', pgn: chess.pgn(),
-      }).then(({ data }) => {
-        if (data.user) { updateUser(data.user); }
-      }).catch(() => {});
+      }).then(({ data }) => { if (data.user) updateUser(data.user); }).catch(() => {});
     }
   }, [flagged]);
 
-  // ── Create game in DB ────────────────────────────────────────────────────
+  // ── Create game in DB ────────────────────────────────────────────────
   useEffect(() => {
     if (user) {
-      api.post('/games', {})
-        .then(r => setGameId(r.data._id))
-        .catch(() => setSaveError(true));
+      api.post('/games', {}).then(r => setGameId(r.data._id)).catch(() => setSaveError(true));
     }
   }, []);
 
-  // ── Auto bot move ────────────────────────────────────────────────────────
+  // ── Auto bot move ────────────────────────────────────────────────────
   useEffect(() => {
     if (!isBotGame || chess.isGameOver() || flagged) return;
-    if (turn !== 'b') return; // bot plays black
-
+    if (turn !== 'b') return;
     setBotThinking(true);
     const thinkTime = 400 + difficulty * 200 + Math.random() * 200;
     botTimeout.current = setTimeout(() => {
@@ -132,25 +171,24 @@ export function GamePage() {
           if (result.captured) setCapturedByBlack(p => [...p, result.captured]);
         }
       }
+      botTurnRef.current = false;
       setBotThinking(false);
     }, thinkTime);
-
     return () => clearTimeout(botTimeout.current);
   }, [fen, turn, isBotGame, difficulty, flagged]);
 
-  // ── Save moves to DB ─────────────────────────────────────────────────────
+  // ── Save moves to DB ─────────────────────────────────────────────────
   useEffect(() => {
     if (!gameId || history.length === 0 || history.length === prevHistLen.current) return;
     prevHistLen.current = history.length;
     const m = history[history.length - 1];
-    // Start timer on first move
     if (history.length === 1 && timeControl > 0) setTimerRunning(true);
     api.post(`/games/${gameId}/moves`, {
       from: m.from, to: m.to, piece: m.piece, san: m.san, fen,
     }).catch(() => setSaveError(true));
   }, [history.length, gameId, fen]);
 
-  // ── Game over from chess rules ───────────────────────────────────────────
+  // ── Game over from chess rules ────────────────────────────────────────
   useEffect(() => {
     if (!gameOver || showGameOver) return;
     setShowGameOver(true);
@@ -158,11 +196,19 @@ export function GamePage() {
     clearInterval(timerRef.current);
     soundManager.play(gameOver.reason === 'checkmate' ? 'checkmate' : 'move');
 
+    // Gauntlet: if player (white) won, advance progress
+    if (isGauntlet && gameOver.winner === 'white') {
+      try {
+        const current = parseInt(localStorage.getItem(GAUNTLET_KEY) || '0', 10);
+        if (difficulty > current) {
+          localStorage.setItem(GAUNTLET_KEY, String(difficulty));
+        }
+      } catch {}
+    }
+
     if (gameId && user) {
       api.post(`/games/${gameId}/complete`, {
-        result: gameOver.winner,
-        resultReason: gameOver.reason,
-        pgn: chess.pgn(),
+        result: gameOver.winner, resultReason: gameOver.reason, pgn: chess.pgn(),
       }).then(({ data }) => {
         if (data.user) {
           updateUser(data.user);
@@ -175,14 +221,19 @@ export function GamePage() {
     }
   }, [gameOver]);
 
-  // ── Player square click ──────────────────────────────────────────────────
+  // ── Player square click ──────────────────────────────────────────────
   const handleSquareClick = useCallback((square) => {
     if (showGameOver || flagged) return;
-    if (isBotGame && turn === 'b') return;
+    if (isBotGame && (botTurnRef.current || chess.turn() !== 'w')) return;
     if (botThinking) return;
+
+    // Clear hint on any click
+    setHintMove(null);
+    clearTimeout(hintTimer.current);
 
     const move = selectSquare(square);
     if (move) {
+      if (isBotGame) botTurnRef.current = true;
       soundManager.play(move.captured ? 'capture' : 'move');
       if (chess.inCheck()) soundManager.play('check');
       if (move.captured) {
@@ -192,11 +243,54 @@ export function GamePage() {
     } else {
       soundManager.play('select');
     }
-  }, [selectSquare, showGameOver, flagged, chess, isBotGame, turn, botThinking]);
+  }, [selectSquare, showGameOver, flagged, chess, isBotGame, botThinking]);
 
-  // ── Reset ────────────────────────────────────────────────────────────────
-  const handleReset = () => {
+  // ── Hint ─────────────────────────────────────────────────────────────
+  const handleHint = useCallback(() => {
+    if (hintLoading || gameOver || flagged || botThinking) return;
+    if (isBotGame && chess.turn() !== 'w') return;
+    setHintLoading(true);
+    clearTimeout(hintTimer.current);
+    // Run async to not block UI
+    setTimeout(() => {
+      const move = getBotMove(chess, Math.min(difficulty + 1, 4) || 3);
+      setHintMove(move || null);
+      setHintLoading(false);
+      soundManager.play('select');
+      // Auto-clear hint after 4 s
+      hintTimer.current = setTimeout(() => setHintMove(null), 4000);
+    }, 80);
+  }, [hintLoading, gameOver, flagged, botThinking, chess, difficulty, isBotGame]);
+
+  // ── Resign ────────────────────────────────────────────────────────────
+  const handleResign = useCallback(() => {
+    if (gameOver || flagged) return;
+    setShowResignConfirm(false);
+    setShowGameOver(true);
+    setTimerRunning(false);
+    clearInterval(timerRef.current);
+    soundManager.play('checkmate');
+    if (gameId && user) {
+      api.post(`/games/${gameId}/complete`, {
+        result: 'black', resultReason: 'resignation', pgn: chess.pgn(),
+      }).then(({ data }) => { if (data.user) updateUser(data.user); }).catch(() => {});
+    }
+  }, [gameOver, flagged, gameId, user, chess, updateUser]);
+
+  // ── Copy PGN ─────────────────────────────────────────────────────────
+  const handleCopyPGN = () => {
+    const pgn = chess.pgn() || '(no moves yet)';
+    navigator.clipboard.writeText(pgn).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+
+  // ── Reset ─────────────────────────────────────────────────────────────
+  const handleReset = (explicitTime) => {
+    const t = explicitTime !== undefined ? explicitTime : timeControl;
     clearTimeout(botTimeout.current);
+    clearTimeout(hintTimer.current);
     clearInterval(timerRef.current);
     resetGame();
     setCapturedByWhite([]); setCapturedByBlack([]);
@@ -204,8 +298,11 @@ export function GamePage() {
     setBotThinking(false);
     setSaveError(false);
     setFlagged(null);
-    setTimeWhite(timeControl);
-    setTimeBlack(timeControl);
+    setHintMove(null);
+    setHintLoading(false);
+    setShowResignConfirm(false);
+    botTurnRef.current = false;
+    setTimeWhite(t); setTimeBlack(t);
     setTimerRunning(false);
     prevHistLen.current = 0;
     if (user) api.post('/games', {}).then(r => setGameId(r.data._id)).catch(() => {});
@@ -213,11 +310,8 @@ export function GamePage() {
 
   const applyTimeControl = (tc) => {
     setTimeControl(tc);
-    setTimeWhite(tc);
-    setTimeBlack(tc);
-    setTimerRunning(false);
     setShowTimeSelect(false);
-    handleReset();
+    handleReset(tc);
   };
 
   const xpGain = (gameOver || flagged)
@@ -225,7 +319,11 @@ export function GamePage() {
       : gameOver?.reason === 'draw' ? 75 : 25
     : null;
 
-  const resultWinner = gameOver?.winner || (flagged === 'w' ? 'black' : flagged === 'b' ? 'white' : null);
+  const resultWinner = gameOver?.winner
+    || (flagged === 'w' ? 'black' : flagged === 'b' ? 'white' : null);
+
+  // ── Gauntlet next opponent ─────────────────────────────────────────────
+  const gauntletWon = isGauntlet && gameOver?.winner === 'white' && difficulty < 5;
 
   return (
     <div className="page-root">
@@ -239,21 +337,22 @@ export function GamePage() {
           <span className="bot-banner-icon">{botInfo.icon}</span>
           <span>Playing vs <strong style={{ color: botInfo.color }}>{botInfo.name}</strong></span>
           <span className="bot-elo-badge">{botInfo.elo}</span>
+          {isGauntlet && <span className="gauntlet-badge">⚔️ Gauntlet</span>}
           {botThinking && <span className="bot-thinking">thinking…</span>}
           <button className="btn-ghost btn-sm ml-auto" onClick={() => navigate('/bots')}>Change Opponent</button>
         </div>
       )}
 
       <div className="game-layout">
-        {/* ─ Left sidebar ─────────────────────────────────────────── */}
+        {/* ─ Left sidebar ──────────────────────────────────────────── */}
         <div className="game-sidebar left-sidebar">
 
-          {/* Time control selector */}
+          {/* Time control */}
           <div className="sidebar-panel">
             <div className="time-control-header">
-              <h4>Time Control</h4>
+              <h4>{getTimeLabel(timeControl)}</h4>
               <button className="btn-ghost btn-xs" onClick={() => setShowTimeSelect(v => !v)}>
-                {timeControl === 0 ? '∞' : `${timeControl / 60}min`} ▾
+                {timeControl === 0 ? '∞' : `${Math.round(timeControl / 60)}m`} ▾
               </button>
             </div>
             {showTimeSelect && (
@@ -263,36 +362,36 @@ export function GamePage() {
                     key={o.label}
                     className={`time-opt ${timeControl === o.seconds ? 'time-opt-active' : ''}`}
                     onClick={() => applyTimeControl(o.seconds)}
-                  >{o.label}</button>
+                  ><span className="time-opt-tag">{o.tag}</span> {o.label}</button>
                 ))}
               </div>
             )}
-
-            {/* Clocks */}
             {timeControl > 0 && (
               <div className="clocks">
                 <div className="clock-row">
-                  <span className="clock-label">
-                    <span className="dot-w" />
-                    {isBotGame ? (user?.username || 'You') : 'White'}
-                  </span>
+                  <span className="clock-label"><span className="dot-w" />{isBotGame ? (user?.username || 'You') : 'White'}</span>
                   <Clock seconds={timeWhite} active={turn === 'w' && timerRunning} flagged={flagged === 'w'} />
                 </div>
                 <div className="clock-row">
-                  <span className="clock-label">
-                    <span className="dot-b" />
-                    {isBotGame ? (botInfo?.name || 'Black') : 'Black'}
-                  </span>
+                  <span className="clock-label"><span className="dot-b" />{isBotGame ? (botInfo?.name || 'Black') : 'Black'}</span>
                   <Clock seconds={timeBlack} active={turn === 'b' && timerRunning} flagged={flagged === 'b'} />
                 </div>
               </div>
             )}
           </div>
 
+          {/* Opening name */}
+          {openingName && (
+            <div className="sidebar-panel opening-panel">
+              <h4>Opening</h4>
+              <div className="opening-name">{openingName}</div>
+            </div>
+          )}
+
           {/* Move history */}
           <div className="sidebar-panel">
             <h4>Moves</h4>
-            <div className="move-history">
+            <div className="move-history" ref={moveHistRef}>
               {history.map((_, i) => i % 2 === 0 && (
                 <div key={i} className="move-row">
                   <span className="mn">{Math.floor(i / 2) + 1}.</span>
@@ -304,18 +403,24 @@ export function GamePage() {
             </div>
           </div>
 
-          {/* Captured pieces */}
+          {/* Captured pieces + material advantage */}
           <div className="sidebar-panel">
-            <h4>Captured</h4>
+            <h4>Captured
+              {materialAdv !== 0 && (
+                <span className={`material-adv ${materialAdv > 0 ? 'adv-white' : 'adv-black'}`}>
+                  {materialAdv > 0 ? `+${materialAdv} ⬜` : `${materialAdv} ⬛`}
+                </span>
+              )}
+            </h4>
             <div className="captured-block">
               <div className="cap-row">
-                <span className="cap-label">White</span>
+                <span className="cap-label">⬜</span>
                 <span className="cap-pieces">
                   {capturedByWhite.length ? capturedByWhite.map((p,i) => <span key={i}>{PIECE_SYM[p]||p}</span>) : '—'}
                 </span>
               </div>
               <div className="cap-row">
-                <span className="cap-label">Black</span>
+                <span className="cap-label">⬛</span>
                 <span className="cap-pieces">
                   {capturedByBlack.length ? capturedByBlack.map((p,i) => <span key={i}>{PIECE_SYM_W[p]||p}</span>) : '—'}
                 </span>
@@ -323,9 +428,7 @@ export function GamePage() {
             </div>
           </div>
 
-          {saveError && (
-            <div className="sidebar-panel save-warn">⚠ Moves not saving</div>
-          )}
+          {saveError && <div className="sidebar-panel save-warn">⚠ Moves not saving</div>}
         </div>
 
         {/* ─ 3D Canvas ─────────────────────────────────────────────── */}
@@ -333,6 +436,9 @@ export function GamePage() {
           {isCheck && !gameOver && !flagged && <div className="check-banner">CHECK!</div>}
           {botThinking && (
             <div className="thinking-banner">{botInfo?.icon} {botInfo?.name} is thinking…</div>
+          )}
+          {hintMove && (
+            <div className="hint-banner">💡 Hint: move the highlighted piece</div>
           )}
           <Canvas shadows camera={{ position: [0, 14, 11], fov: 45 }} style={{ background: '#2a1f14' }}>
             <ambientLight intensity={0.45} />
@@ -347,6 +453,7 @@ export function GamePage() {
               onSquareClick={handleSquareClick}
               isCheck={isCheck}
               turn={turn}
+              hintMove={hintMove}
             />
             <OrbitControls enablePan={false} minDistance={7} maxDistance={26} maxPolarAngle={Math.PI / 2.1} />
           </Canvas>
@@ -392,7 +499,26 @@ export function GamePage() {
 
             {/* Actions */}
             <div className="hud-actions">
+              {/* Hint button — only in bot or solo games, and only on your turn */}
+              {!gameOver && !flagged && (
+                <button
+                  className={`btn-hint w-full ${hintLoading ? 'btn-hint-loading' : ''}`}
+                  onClick={handleHint}
+                  disabled={hintLoading || botThinking || (isBotGame && turn !== 'w')}
+                >
+                  {hintLoading ? '⟳ Thinking…' : hintMove ? '✓ Hint shown' : '💡 Get Hint'}
+                </button>
+              )}
+
               <button className="btn-secondary w-full" onClick={handleReset}>New Game</button>
+
+              {/* Resign button */}
+              {!gameOver && !flagged && history.length > 0 && (
+                <button className="btn-danger-sm w-full" onClick={() => setShowResignConfirm(true)}>
+                  🏳 Resign
+                </button>
+              )}
+
               {isBotGame && (
                 <button className="btn-secondary w-full" onClick={() => navigate('/bots')}>Choose Bot</button>
               )}
@@ -412,29 +538,65 @@ export function GamePage() {
         </div>
       </div>
 
-      {/* ─ Game Over modal ──────────────────────────────────────────── */}
+      {/* ─ Resign confirmation ───────────────────────────────────────── */}
+      {showResignConfirm && (
+        <div className="overlay-backdrop" onClick={() => setShowResignConfirm(false)}>
+          <div className="confirm-card" onClick={e => e.stopPropagation()}>
+            <h3>Resign?</h3>
+            <p>Are you sure you want to resign? You will receive 25 XP.</p>
+            <div className="confirm-actions">
+              <button className="btn-danger" onClick={handleResign}>🏳 Resign</button>
+              <button className="btn-secondary" onClick={() => setShowResignConfirm(false)}>Keep Playing</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─ Game Over modal ───────────────────────────────────────────── */}
       {showGameOver && (gameOver || flagged) && (
         <div className="overlay-backdrop">
           <div className="game-over-card">
             <div className="go-icon">
-              {flagged ? '⏱' : gameOver?.reason === 'checkmate'
-                ? (resultWinner === 'white' ? '♔' : '♚') : '½'}
+              {flagged ? '⏱' : gameOver?.reason === 'resignation' ? '🏳'
+                : gameOver?.reason === 'checkmate'
+                  ? (resultWinner === 'white' ? '♔' : '♚') : '½'}
             </div>
             <h2>
               {flagged
                 ? `${resultWinner === 'white' ? 'White' : 'Black'} wins on time!`
-                : gameOver?.reason === 'checkmate'
-                  ? `${resultWinner === 'white' ? 'White' : 'Black'} Wins!`
-                  : gameOver?.reason === 'stalemate' ? 'Stalemate!'
-                  : 'Draw!'}
+                : gameOver?.reason === 'resignation'
+                  ? 'Resignation'
+                  : gameOver?.reason === 'checkmate'
+                    ? `${resultWinner === 'white' ? 'White' : 'Black'} Wins!`
+                    : gameOver?.reason === 'stalemate' ? 'Stalemate!'
+                    : 'Draw!'}
             </h2>
-            <p className="go-reason">{flagged ? 'Flag fallen' : gameOver?.reason}</p>
+            <p className="go-reason">
+              {flagged ? 'Flag fallen' : gameOver?.reason}
+            </p>
             {xpGain !== null && (
               <div className="go-xp">+{xpGain} XP {resultWinner === 'white' ? '🎉' : ''}</div>
             )}
+
+            {/* PGN copy */}
+            {history.length > 0 && (
+              <button className="btn-ghost go-pgn-btn" onClick={handleCopyPGN}>
+                {copied ? '✓ Copied!' : '📋 Copy PGN'}
+              </button>
+            )}
+
             <div className="go-actions">
               <button className="btn-primary" onClick={handleReset}>Play Again</button>
-              {isBotGame && (
+              {gauntletWon && (
+                <button className="btn-play" style={{ boxShadow: '3px 3px 0 #ffd700' }}
+                  onClick={() => navigate(`/game/bot?difficulty=${difficulty + 1}&gauntlet=1`)}>
+                  Next Opponent ⚔️
+                </button>
+              )}
+              {isGauntlet && (
+                <button className="btn-secondary" onClick={() => navigate('/gauntlet')}>Gauntlet</button>
+              )}
+              {isBotGame && !isGauntlet && (
                 <button className="btn-secondary" onClick={() => navigate('/bots')}>Change Bot</button>
               )}
               <button className="btn-secondary" onClick={() => navigate('/home')}>Home</button>
