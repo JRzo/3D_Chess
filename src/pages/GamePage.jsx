@@ -334,7 +334,7 @@ export function GamePage() {
           {botThinking && (
             <div className="thinking-banner">{botInfo?.icon} {botInfo?.name} is thinking…</div>
           )}
-          <Canvas shadows camera={{ position: [0, 14, 11], fov: 45 }} style={{ background: '#0f1720' }}>
+          <Canvas shadows camera={{ position: [0, 14, 11], fov: 45 }} style={{ background: '#2a1f14' }}>
             <ambientLight intensity={0.45} />
             <directionalLight position={[8, 18, 8]} intensity={1.1} castShadow shadow-mapSize={[2048, 2048]} />
             <pointLight position={[-8, 8, -8]} intensity={0.4} color="#6ee7b7" />
