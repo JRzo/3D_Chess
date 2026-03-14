@@ -481,3 +481,233 @@ a { color: var(--accent); text-decoration: none; }
 ::-webkit-scrollbar-track { background: var(--surface2); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+/* ─── Hint button (in HUD) ─────────────────────────────────────────── */
+.btn-hint {
+  padding: 9px 18px; border-radius: 4px;
+  border: 2px solid #6ee7b7;
+  background: #f0fdf9; color: #065f46; font-size: 13px; font-weight: 700;
+  transition: background 0.15s, opacity 0.15s;
+  font-family: var(--font-ui);
+}
+.btn-hint:hover:not(:disabled) { background: #d1fae5; }
+.btn-hint:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-hint-loading { opacity: 0.7; }
+
+/* ─── Hint / Opening banners in canvas ─────────────────────────────── */
+.hint-banner {
+  position: absolute; top: 48px; left: 50%; transform: translateX(-50%);
+  background: #065f46; color: #6ee7b7;
+  padding: 6px 20px; font-size: 13px; z-index: 10;
+  border: 2px solid #6ee7b7; font-weight: 600;
+  animation: fadeIn 0.2s ease;
+}
+
+/* ─── Opening name in sidebar ──────────────────────────────────────── */
+.opening-panel { background: #fdf6ee !important; }
+.opening-name {
+  font-size: 13px; font-weight: 700; color: var(--accent);
+  font-family: var(--font); font-style: italic;
+  line-height: 1.4;
+}
+
+/* ─── Resign / small danger button ─────────────────────────────────── */
+.btn-danger-sm {
+  padding: 8px 16px; border-radius: 4px;
+  border: 2px solid var(--danger);
+  background: #fff; color: var(--danger); font-size: 13px; font-weight: 600;
+  transition: background 0.15s;
+  font-family: var(--font-ui);
+}
+.btn-danger-sm:hover { background: #fef2f2; }
+
+/* ─── Gauntlet badge in bot banner ─────────────────────────────────── */
+.gauntlet-badge {
+  background: rgba(255,215,0,0.15); color: #ffd700;
+  padding: 2px 8px; font-size: 12px; font-weight: 700;
+  border: 1px solid rgba(255,215,0,0.4);
+}
+
+/* ─── PGN copy button in game-over modal ───────────────────────────── */
+.go-pgn-btn { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.go-pgn-btn:hover { color: var(--text); }
+
+/* ─── Confirm card (resign / reset) ────────────────────────────────── */
+.confirm-card {
+  width: 360px; padding: 36px;
+  background: var(--surface); border: 3px solid #1a1a1a;
+  text-align: center; box-shadow: 8px 8px 0 #1a1a1a;
+}
+.confirm-card h3 { font-size: 20px; margin-bottom: 10px; font-family: var(--font); }
+.confirm-card p  { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
+.confirm-actions { display: flex; gap: 12px; justify-content: center; }
+
+/* ─── Home: Feature cards ───────────────────────────────────────────── */
+.home-features {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  margin-bottom: 24px;
+}
+.feature-card {
+  display: flex; align-items: center; gap: 16px; padding: 20px 24px;
+  border: 2px solid #1a1a1a; background: var(--surface); cursor: pointer; text-align: left; width: 100%;
+  transition: transform 0.15s, box-shadow 0.15s; box-shadow: 3px 3px 0 #1a1a1a;
+}
+.feature-card:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 #1a1a1a; }
+.feature-card-icon { font-size: 32px; flex-shrink: 0; }
+.feature-card-body { flex: 1; }
+.feature-card-title { font-size: 16px; font-weight: 700; font-family: var(--font); margin-bottom: 4px; }
+.feature-card-desc  { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.feature-card-progress { font-size: 12px; font-weight: 600; color: var(--accent); }
+.feature-card-arrow { font-size: 18px; color: var(--muted); }
+.feature-card:hover .feature-card-arrow { color: #1a1a1a; }
+
+/* ─── Puzzle Mode ───────────────────────────────────────────────────── */
+.puzzles-layout {
+  flex: 1; display: grid;
+  grid-template-columns: 220px 1fr 240px;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+}
+
+.puzzle-list-panel {
+  display: flex; flex-direction: column;
+  background: var(--surface); border-right: 2px solid #1a1a1a;
+  overflow-y: auto;
+}
+.puzzle-list-header {
+  padding: 16px; border-bottom: 2px solid #1a1a1a; flex-shrink: 0;
+}
+.puzzle-list-header h2 { font-size: 18px; margin-bottom: 10px; font-family: var(--font); }
+.puzzle-progress-bar-wrap { height: 6px; background: var(--border); border: 1px solid #1a1a1a; overflow: hidden; margin-bottom: 4px; }
+.puzzle-progress-bar-fill { height: 100%; background: #1a1a1a; transition: width 0.5s; }
+.puzzle-progress-text { font-size: 11px; color: var(--muted); }
+
+.puzzle-cards { display: flex; flex-direction: column; gap: 0; padding: 8px; }
+.puzzle-card {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px;
+  border: 2px solid var(--border); background: var(--surface); cursor: pointer; text-align: left;
+  margin-bottom: 6px; transition: border-color 0.15s, background 0.15s;
+}
+.puzzle-card:hover { border-color: #1a1a1a; }
+.puzzle-card-active { border-color: #1a1a1a !important; background: var(--surface2) !important; }
+.puzzle-card-solved { background: #f0fdf4; }
+.puzzle-card-top    { display: flex; align-items: center; gap: 6px; }
+.puzzle-card-num    { font-size: 11px; color: var(--muted); font-weight: 700; }
+.puzzle-card-diff   { font-size: 11px; font-weight: 700; margin-left: auto; }
+.puzzle-solved-badge { font-size: 12px; font-weight: 700; color: var(--success); }
+.puzzle-card-title  { font-size: 13px; font-weight: 700; font-family: var(--font); }
+.puzzle-card-xp     { font-size: 11px; color: var(--accent); font-weight: 600; }
+
+.puzzle-board-area {
+  display: flex; flex-direction: column; position: relative; overflow: hidden;
+}
+.puzzle-board-area canvas { display: block; width: 100% !important; height: 100% !important; }
+
+.puzzle-welcome {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px; text-align: center;
+}
+.puzzle-welcome-icon { font-size: 64px; margin-bottom: 16px; }
+.puzzle-welcome h2   { font-size: 26px; font-family: var(--font); margin-bottom: 12px; }
+.puzzle-welcome p    { color: var(--muted); font-size: 15px; max-width: 360px; line-height: 1.6; margin-bottom: 28px; }
+.puzzle-stats-row    { display: flex; gap: 24px; }
+.puzzle-stat         { text-align: center; }
+.puzzle-stat-val     { display: block; font-size: 28px; font-weight: 700; font-family: var(--font); }
+.puzzle-stat-lbl     { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.puzzle-status-banner {
+  padding: 10px 20px; font-size: 13px; font-weight: 600; background: var(--surface2);
+  border-bottom: 2px solid var(--border); flex-shrink: 0; min-height: 42px;
+  display: flex; align-items: center;
+}
+.puzz-correct { background: #f0fdf4; color: var(--success); border-color: var(--success); }
+.puzz-wrong   { background: #fef2f2; color: var(--danger);  border-color: var(--danger); }
+
+.puzzle-info-panel {
+  display: flex; flex-direction: column; gap: 0;
+  background: var(--surface); border-left: 2px solid #1a1a1a; overflow-y: auto;
+  padding: 20px 16px;
+}
+.puzzle-info-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.puzzle-info-header h3 { font-size: 18px; font-family: var(--font); }
+.puzzle-info-diff   { font-size: 12px; font-weight: 700; }
+.puzzle-info-desc   { color: var(--muted); font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+.puzzle-info-meta   { display: flex; flex-direction: column; gap: 8px; padding: 14px; background: var(--surface2); border: 1px solid var(--border); margin-bottom: 16px; }
+.puzzle-meta-item   { display: flex; justify-content: space-between; font-size: 13px; }
+.puzzle-meta-lbl    { color: var(--muted); }
+.puzzle-meta-val    { font-weight: 700; }
+
+.puzzle-success-block { text-align: center; padding: 16px; background: #f0fdf4; border: 2px solid var(--success); margin-bottom: 14px; }
+.puzzle-success-icon  { font-size: 36px; margin-bottom: 6px; }
+.puzzle-xp-badge      { font-size: 16px; font-weight: 700; color: var(--accent); font-family: var(--font); }
+.puzzle-xp-grey       { color: var(--muted) !important; }
+
+.puzzle-actions     { display: flex; flex-direction: column; gap: 8px; }
+.puzzle-hint-box    { padding: 12px; background: #fdf6ee; border: 2px solid var(--accent); font-size: 13px; color: var(--accent); font-style: italic; line-height: 1.5; }
+
+/* ─── Gauntlet Page ─────────────────────────────────────────────────── */
+.gauntlet-page { flex: 1; padding: 32px; max-width: 900px; width: 100%; margin: 0 auto; }
+
+.gauntlet-header {
+  margin-bottom: 28px; padding: 28px 32px;
+  background: #1a1a1a; color: #fff;
+  border: 2px solid #1a1a1a; box-shadow: 6px 6px 0 var(--accent);
+}
+.gauntlet-title-row { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 20px; }
+.gauntlet-trophy { font-size: 48px; flex-shrink: 0; }
+.gauntlet-header h1 { font-size: 28px; font-family: var(--font); color: #fff; margin-bottom: 6px; }
+.gauntlet-sub    { font-size: 14px; color: rgba(255,255,255,0.65); }
+.gauntlet-progress-wrap { }
+.gauntlet-progress-label { font-size: 13px; color: rgba(255,255,255,0.65); margin-bottom: 8px; font-weight: 600; }
+.gauntlet-progress-track { display: flex; gap: 8px; }
+.gauntlet-pip { width: 40px; height: 10px; border: 2px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); transition: background 0.3s; }
+.pip-done    { background: var(--success) !important; border-color: var(--success) !important; }
+.pip-current { background: var(--accent) !important; border-color: var(--accent) !important; animation: pulse 1s infinite alternate; }
+.pip-locked  { }
+
+.gauntlet-champion-banner {
+  display: flex; align-items: center; gap: 20px;
+  padding: 20px 28px; margin-bottom: 24px;
+  background: #fdf6ee; border: 3px solid #ffd700;
+  box-shadow: 5px 5px 0 #ffd700;
+}
+.champ-icon  { font-size: 44px; }
+.champ-title { font-size: 22px; font-weight: 700; color: #b8860b; font-family: var(--font); }
+.champ-sub   { font-size: 14px; color: var(--muted); }
+
+.gauntlet-stages { display: flex; flex-direction: column; gap: 0; margin-bottom: 24px; }
+
+.gauntlet-stage {
+  position: relative; padding: 20px 24px;
+  border: 2px solid var(--border); background: var(--surface);
+  margin-bottom: 8px; transition: border-color 0.15s;
+}
+.gauntlet-stage-inner { display: flex; align-items: center; gap: 16px; }
+.gauntlet-current { border-color: #1a1a1a; box-shadow: 4px 4px 0 #1a1a1a; }
+.gauntlet-defeated { background: #f0fdf4; border-color: var(--success); opacity: 0.85; }
+.gauntlet-locked   { opacity: 0.5; }
+.gauntlet-champion { border-color: #ffd700; background: #fdf6ee; }
+
+.gauntlet-stage-num  { font-size: 13px; font-weight: 700; color: var(--muted); width: 24px; flex-shrink: 0; }
+.gauntlet-stage-icon { font-size: 32px; width: 44px; text-align: center; flex-shrink: 0; }
+.gauntlet-stage-body { flex: 1; }
+.gauntlet-stage-name { font-size: 18px; font-weight: 700; font-family: var(--font); }
+.gauntlet-stage-elo  { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.gauntlet-stage-desc { font-size: 13px; color: var(--muted); }
+.gauntlet-stage-status { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+
+.gauntlet-status-badge { font-size: 13px; font-weight: 700; padding: 4px 12px; border: 2px solid currentColor; }
+.gauntlet-current-badge  { color: #1a1a1a; }
+.gauntlet-defeated-badge { color: var(--success); }
+.gauntlet-locked-badge   { color: var(--muted); }
+.gauntlet-champion-badge { color: #b8860b; }
+
+.gauntlet-play-btn { padding: 10px 20px !important; font-size: 14px !important; }
+
+.gauntlet-footer { display: flex; gap: 12px; justify-content: center; padding-top: 8px; }
+
+.gauntlet-connector {
+  position: absolute; left: 34px; top: -8px;
+  width: 2px; height: 8px; background: var(--border);
+}
+.connector-done { background: var(--success); }
