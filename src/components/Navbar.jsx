@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-const RANK_COLORS = { Legend:'#ffd700', Platinum:'#c8dde8', Gold:'#ffd700', Silver:'#c0c0c0', Bronze:'#cd7f32' };
+const RANK_COLORS = { Legend:'#a855f7', Platinum:'#38bdf8', Gold:'#f59e0b', Silver:'#c0c0c0', Bronze:'#cd7f32' };
 
 export function Navbar() {
   const { user }    = useAuth();

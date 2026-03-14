@@ -17,12 +17,20 @@ const PIECE_SYM   = { p:'♟', r:'♜', n:'♞', b:'♝', q:'♛', k:'♚' };
 const PIECE_SYM_W = { p:'♙', r:'♖', n:'♘', b:'♗', q:'♕', k:'♔' };
 
 const TIME_OPTIONS = [
-  { label: '1 min',  seconds: 60  },
-  { label: '3 min',  seconds: 180 },
-  { label: '5 min',  seconds: 300 },
-  { label: '10 min', seconds: 600 },
-  { label: '∞',      seconds: 0   },
+  { label: 'Bullet · 1 min',  seconds: 60,  tag: '⚡' },
+  { label: 'Bullet · 2 min',  seconds: 120, tag: '⚡' },
+  { label: 'Blitz · 3 min',   seconds: 180, tag: '🔥' },
+  { label: 'Blitz · 5 min',   seconds: 300, tag: '🔥' },
+  { label: 'Rapid · 10 min',  seconds: 600, tag: '⏱' },
+  { label: 'Unlimited',       seconds: 0,   tag: '∞'  },
 ];
+
+function getTimeLabel(seconds) {
+  if (seconds === 0) return 'Unlimited';
+  if (seconds <= 120) return `⚡ Bullet`;
+  if (seconds <= 300) return `🔥 Blitz`;
+  return `⏱ Rapid`;
+}
 
 function fmt(s) {
   if (s === 0 || s === null) return '∞';
@@ -39,7 +47,7 @@ function Clock({ seconds, active, flagged }) {
   );
 }
 
-const RANK_COLORS = { Legend:'#ffd700', Platinum:'#c8dde8', Gold:'#ffd700', Silver:'#c0c0c0', Bronze:'#cd7f32' };
+const RANK_COLORS = { Legend:'#a855f7', Platinum:'#38bdf8', Gold:'#f59e0b', Silver:'#c0c0c0', Bronze:'#cd7f32' };
 const GAUNTLET_KEY = 'chess3d-gauntlet';
 
 export function GamePage() {
@@ -76,6 +84,7 @@ export function GamePage() {
   const botTimeout   = useRef(null);
   const timerRef     = useRef(null);
   const hintTimer    = useRef(null);
+  const moveHistRef  = useRef(null);
   // Tracks bot's turn synchronously — prevents stale-state double-move.
   const botTurnRef   = useRef(false);
 
@@ -84,11 +93,27 @@ export function GamePage() {
     history, selectSquare, makeMove, resetGame, getPieces, isCheck, turn, chess,
   } = useChess();
 
+  // ── Material advantage ───────────────────────────────────────────────
+  const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+  const materialAdv = useMemo(() => {
+    let w = 0, b = 0;
+    capturedByWhite.forEach(p => { w += PIECE_VALUES[p] || 0; });
+    capturedByBlack.forEach(p => { b += PIECE_VALUES[p] || 0; });
+    return w - b; // positive = white ahead
+  }, [capturedByWhite, capturedByBlack]);
+
   // ── Detect opening name ──────────────────────────────────────────────
   const openingName = useMemo(() => {
     if (history.length === 0) return null;
     return detectOpening(history.map(m => m.san));
   }, [history]);
+
+  // ── Move history auto-scroll ─────────────────────────────────────────
+  useEffect(() => {
+    if (moveHistRef.current) {
+      moveHistRef.current.scrollTop = moveHistRef.current.scrollHeight;
+    }
+  }, [history.length]);
 
   // ── Timer tick ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -325,9 +350,9 @@ export function GamePage() {
           {/* Time control */}
           <div className="sidebar-panel">
             <div className="time-control-header">
-              <h4>Time Control</h4>
+              <h4>{getTimeLabel(timeControl)}</h4>
               <button className="btn-ghost btn-xs" onClick={() => setShowTimeSelect(v => !v)}>
-                {timeControl === 0 ? '∞' : `${timeControl / 60}min`} ▾
+                {timeControl === 0 ? '∞' : `${Math.round(timeControl / 60)}m`} ▾
               </button>
             </div>
             {showTimeSelect && (
@@ -337,7 +362,7 @@ export function GamePage() {
                     key={o.label}
                     className={`time-opt ${timeControl === o.seconds ? 'time-opt-active' : ''}`}
                     onClick={() => applyTimeControl(o.seconds)}
-                  >{o.label}</button>
+                  ><span className="time-opt-tag">{o.tag}</span> {o.label}</button>
                 ))}
               </div>
             )}
@@ -366,7 +391,7 @@ export function GamePage() {
           {/* Move history */}
           <div className="sidebar-panel">
             <h4>Moves</h4>
-            <div className="move-history">
+            <div className="move-history" ref={moveHistRef}>
               {history.map((_, i) => i % 2 === 0 && (
                 <div key={i} className="move-row">
                   <span className="mn">{Math.floor(i / 2) + 1}.</span>
@@ -378,18 +403,24 @@ export function GamePage() {
             </div>
           </div>
 
-          {/* Captured pieces */}
+          {/* Captured pieces + material advantage */}
           <div className="sidebar-panel">
-            <h4>Captured</h4>
+            <h4>Captured
+              {materialAdv !== 0 && (
+                <span className={`material-adv ${materialAdv > 0 ? 'adv-white' : 'adv-black'}`}>
+                  {materialAdv > 0 ? `+${materialAdv} ⬜` : `${materialAdv} ⬛`}
+                </span>
+              )}
+            </h4>
             <div className="captured-block">
               <div className="cap-row">
-                <span className="cap-label">White</span>
+                <span className="cap-label">⬜</span>
                 <span className="cap-pieces">
                   {capturedByWhite.length ? capturedByWhite.map((p,i) => <span key={i}>{PIECE_SYM[p]||p}</span>) : '—'}
                 </span>
               </div>
               <div className="cap-row">
-                <span className="cap-label">Black</span>
+                <span className="cap-label">⬛</span>
                 <span className="cap-pieces">
                   {capturedByBlack.length ? capturedByBlack.map((p,i) => <span key={i}>{PIECE_SYM_W[p]||p}</span>) : '—'}
                 </span>

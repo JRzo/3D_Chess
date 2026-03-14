@@ -711,3 +711,103 @@ a { color: var(--accent); text-decoration: none; }
   width: 2px; height: 8px; background: var(--border);
 }
 .connector-done { background: var(--success); }
+
+/* ─── Login: password toggle & extras ──────────────────────────────── */
+.pw-wrap { position: relative; }
+.pw-wrap input { width: 100%; padding-right: 42px; }
+.pw-toggle {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 40px; border: none; background: transparent;
+  color: var(--muted); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.pw-toggle:hover { color: var(--text); }
+.form-hint { font-size: 11px; color: var(--muted); font-style: italic; }
+.btn-spinner { display: inline-block; animation: spin 0.8s linear infinite; margin-right: 4px; }
+.auth-footer { display: flex; justify-content: center; gap: 16px; margin-top: 24px; opacity: 0.2; }
+.auth-footer-icon { font-size: 20px; }
+
+/* ─── Leaderboard: own row highlight ───────────────────────────────── */
+.lb-row-me {
+  background: #fdf6ee !important;
+  border-left: 3px solid var(--accent);
+  font-weight: 700;
+}
+.lb-row-me .lb-name { color: var(--accent); }
+
+/* ─── Profile: avatar wrap with rank badge ──────────────────────────── */
+.profile-av-wrap { position: relative; display: inline-block; flex-shrink: 0; }
+.profile-av-rank {
+  position: absolute; bottom: -4px; right: -8px;
+  font-size: 20px; line-height: 1;
+}
+.profile-xp-labels { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.profile-xp-pct { font-size: 11px; color: var(--muted); text-align: right; margin-top: 3px; }
+.stat-icon { font-size: 22px; margin-bottom: 4px; }
+
+/* ─── Profile skeleton loader ───────────────────────────────────────── */
+.profile-skeleton { flex: 1; padding: 36px; max-width: 900px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+@keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+.skel-av, .skel-line {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite;
+}
+.skel-av  { width: 80px; height: 80px; border-radius: 4px; }
+.skel-lg  { height: 24px; width: 60%; border-radius: 4px; }
+.skel-md  { height: 16px; width: 40%; border-radius: 4px; }
+.skel-sm  { height: 12px; width: 25%; border-radius: 4px; }
+
+/* ─── Settings: board style picker ─────────────────────────────────── */
+.form-char-count { font-size: 10px; color: var(--muted); font-weight: 400; float: right; }
+.board-style-picker { display: flex; gap: 10px; }
+.board-style-opt {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 10px; border: 2px solid var(--border); background: var(--surface);
+  cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.board-style-opt:hover { border-color: #1a1a1a; }
+.board-style-active { border-color: #1a1a1a !important; background: var(--surface2) !important; }
+.board-style-preview { font-size: 28px; }
+.board-style-label { font-size: 13px; font-weight: 700; }
+.board-style-desc { font-size: 11px; color: var(--muted); text-align: center; }
+
+/* ─── BotSelect: gauntlet CTA ───────────────────────────────────────── */
+.gauntlet-cta {
+  display: flex; align-items: center; gap: 20px;
+  margin-top: 24px; padding: 22px 28px;
+  background: #1a1a1a; border: 2px solid #1a1a1a;
+  box-shadow: 5px 5px 0 var(--accent);
+}
+.gauntlet-cta-icon { font-size: 36px; flex-shrink: 0; }
+.gauntlet-cta-body { flex: 1; }
+.gauntlet-cta-title { font-size: 18px; font-weight: 700; color: #fff; font-family: var(--font); margin-bottom: 4px; }
+.gauntlet-cta-desc  { font-size: 13px; color: rgba(255,255,255,0.65); }
+.btn-play-gauntlet { white-space: nowrap; flex-shrink: 0; background: var(--accent) !important; box-shadow: 3px 3px 0 #fff !important; }
+.btn-play-gauntlet:hover { box-shadow: 5px 5px 0 #fff !important; }
+
+/* ─── Puzzles: give up block & auto-next ────────────────────────────── */
+.puzz-giveup { background: #fffbeb; color: #92400e; border-color: #f59e0b; }
+.puzz-autonext { font-size: 12px; font-weight: 400; opacity: 0.7; font-style: italic; }
+.puzzle-giveup-block {
+  padding: 14px; background: #fffbeb; border: 2px solid #f59e0b; margin-bottom: 14px; text-align: center;
+}
+.puzzle-solution-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.puzzle-solution-move  { font-size: 20px; font-weight: 700; font-family: var(--font); color: #92400e; margin-bottom: 6px; }
+.puzzle-giveup-note    { font-size: 12px; color: var(--muted); font-style: italic; }
+
+/* ─── GamePage: material advantage ─────────────────────────────────── */
+.material-adv {
+  float: right; font-size: 11px; font-weight: 700; padding: 1px 6px;
+  border-radius: 2px;
+}
+.adv-white { background: #f8fafc; color: #1a1a1a; border: 1px solid #1a1a1a; }
+.adv-black { background: #1a1a1a; color: #fff; }
+
+/* ─── GamePage: time option tag ─────────────────────────────────────── */
+.time-opt-tag { font-size: 12px; }
+
+/* ─── Check banner improvement ──────────────────────────────────────── */
+.check-banner {
+  box-shadow: 0 2px 16px rgba(192,57,43,0.5);
+}

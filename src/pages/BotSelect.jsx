@@ -2,8 +2,15 @@ import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { BOT_LEVELS } from '../lib/bot';
 
+function getGauntletProgress() {
+  try { return parseInt(localStorage.getItem('chess3d-gauntlet') || '0', 10); }
+  catch { return 0; }
+}
+
 export function BotSelect() {
   const navigate = useNavigate();
+  const gauntletProgress = getGauntletProgress();
+  const nextGauntletLevel = Math.min(gauntletProgress + 1, 5);
 
   return (
     <div className="page-root">
@@ -39,6 +46,29 @@ export function BotSelect() {
               <div className="bot-card-arrow">→</div>
             </button>
           ))}
+        </div>
+
+        {/* Gauntlet shortcut */}
+        <div className="gauntlet-cta">
+          <div className="gauntlet-cta-icon">⚔️</div>
+          <div className="gauntlet-cta-body">
+            <div className="gauntlet-cta-title">Bot Gauntlet</div>
+            <div className="gauntlet-cta-desc">
+              {gauntletProgress === 5
+                ? '🏆 Champion! You defeated all 5 bots.'
+                : gauntletProgress === 0
+                  ? 'Challenge all 5 bots in sequence. Can you become Champion?'
+                  : `You've defeated ${gauntletProgress}/5 bots. Keep going!`}
+            </div>
+          </div>
+          {gauntletProgress < 5 && (
+            <button
+              className="btn-play btn-play-gauntlet"
+              onClick={() => navigate(`/game/bot?difficulty=${nextGauntletLevel}&gauntlet=1`)}
+            >
+              {gauntletProgress === 0 ? 'Start Gauntlet' : 'Continue ⚔️'}
+            </button>
+          )}
         </div>
       </div>
     </div>

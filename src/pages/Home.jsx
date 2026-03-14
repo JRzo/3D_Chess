@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Navbar } from '../components/Navbar';
 import api from '../lib/api';
 
-const RANK_COLORS = { Legend:'#ffd700', Platinum:'#c8dde8', Gold:'#ffd700', Silver:'#c0c0c0', Bronze:'#cd7f32' };
+const RANK_COLORS = { Legend:'#a855f7', Platinum:'#38bdf8', Gold:'#f59e0b', Silver:'#c0c0c0', Bronze:'#cd7f32' };
 const RANK_ICONS  = { Legend:'👑', Platinum:'💎', Gold:'🥇', Silver:'🥈', Bronze:'🥉' };
 
 function getPuzzlesSolved() {
@@ -21,11 +21,12 @@ export function Home() {
   const navigate  = useNavigate();
   const [leaderboard, setLeaderboard] = useState([]);
   const [recentGames, setRecentGames] = useState([]);
+  const [lbLoading, setLbLoading]     = useState(true);
   const [puzzlesSolved]    = useState(getPuzzlesSolved);
   const [gauntletProgress] = useState(getGauntletProgress);
 
   useEffect(() => {
-    api.get('/users').then(r => setLeaderboard(r.data)).catch(() => {});
+    api.get('/users').then(r => setLeaderboard(r.data)).catch(() => {}).finally(() => setLbLoading(false));
     if (user?._id) api.get(`/games/user/${user._id}`).then(r => setRecentGames(r.data)).catch(() => {});
   }, [user?._id]);
 
@@ -100,16 +101,23 @@ export function Home() {
           <div className="panel">
             <h3>🏆 Leaderboard</h3>
             <div className="lb-list">
-              {leaderboard.slice(0, 10).map((p, i) => (
-                <div key={p._id} className="lb-row" onClick={() => navigate(`/profile/${p._id}`)}>
-                  <span className="lb-pos">#{i + 1}</span>
+              {lbLoading && <p className="empty">Loading…</p>}
+              {!lbLoading && leaderboard.slice(0, 10).map((p, i) => (
+                <div
+                  key={p._id}
+                  className={`lb-row ${p._id === user?._id ? 'lb-row-me' : ''}`}
+                  onClick={() => navigate(`/profile/${p._id}`)}
+                >
+                  <span className="lb-pos">
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                  </span>
                   <span className="lb-av">{p.avatar || '♟'}</span>
-                  <span className="lb-name">{p.username}</span>
-                  <span className="lb-tier" style={{ color: RANK_COLORS[p.stats?.rank] }}>{p.stats?.rank}</span>
-                  <span className="lb-xp">{(p.stats?.xp || 0) + (p.stats?.level || 1) * 100} pts</span>
+                  <span className="lb-name">{p.username}{p._id === user?._id ? ' (you)' : ''}</span>
+                  <span className="lb-tier" style={{ color: RANK_COLORS[p.stats?.rank] || '#cd7f32' }}>{p.stats?.rank || 'Bronze'}</span>
+                  <span className="lb-xp">{p.stats?.xp || 0} XP</span>
                 </div>
               ))}
-              {leaderboard.length === 0 && <p className="empty">No players yet — be the first!</p>}
+              {!lbLoading && leaderboard.length === 0 && <p className="empty">No players yet — be the first!</p>}
             </div>
           </div>
 

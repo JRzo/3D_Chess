@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Chess } from 'chess.js';
@@ -31,31 +31,34 @@ export function Puzzles() {
   const navigate = useNavigate();
   const { user, updateUser } = useAuth();
 
-  // Track which puzzles are solved (localStorage key: 'chess3d-puzzles')
   const [solved, setSolved] = useState(() => {
     try { return JSON.parse(localStorage.getItem('chess3d-puzzles') || '[]'); }
     catch { return []; }
   });
 
   const [activePuzzle, setActivePuzzle] = useState(null);
+  const [wasAlreadySolved, setWasAlreadySolved] = useState(false);
 
-  // ── Per-puzzle state ───────────────────────────────────────────────
   const [chess]           = useState(() => new Chess());
   const [fen, setFen]     = useState('');
   const [selectedSquare, setSelectedSquare] = useState(null);
   const [validMoves, setValidMoves]         = useState([]);
   const [lastMove, setLastMove]             = useState(null);
-  const [status, setStatus]   = useState('idle');   // idle | playing | correct | wrong | solved
+  const [status, setStatus]   = useState('idle');   // idle | playing | correct | wrong | giveup
   const [message, setMessage] = useState('');
   const [moveCount, setMoveCount] = useState(0);
   const [showHint, setShowHint]   = useState(false);
+  const [showSolution, setShowSolution] = useState(false);
   const responseTimer = useRef(null);
+  const autoNextTimer = useRef(null);
 
   const loadPuzzle = useCallback((puzzle) => {
     clearTimeout(responseTimer.current);
+    clearTimeout(autoNextTimer.current);
     chess.load(puzzle.fen);
     setFen(chess.fen());
     setActivePuzzle(puzzle);
+    setWasAlreadySolved(solved.includes(puzzle.id));
     setSelectedSquare(null);
     setValidMoves([]);
     setLastMove(null);
@@ -63,15 +66,14 @@ export function Puzzles() {
     setMessage('');
     setMoveCount(0);
     setShowHint(false);
-  }, [chess]);
+    setShowSolution(false);
+  }, [chess, solved]);
 
-  // ── Square click ───────────────────────────────────────────────────
   const handleSquareClick = useCallback((square) => {
     if (status !== 'playing') return;
 
     const piece = chess.get(square);
 
-    // If we click our own piece, select it
     if (piece && piece.color === chess.turn()) {
       setSelectedSquare(square);
       const moves = chess.moves({ square, verbose: true }).map(m => m.to);
@@ -80,7 +82,6 @@ export function Puzzles() {
       return;
     }
 
-    // Attempt a move
     if (selectedSquare) {
       try {
         const move = chess.move({ from: selectedSquare, to: square, promotion: 'q' });
@@ -101,7 +102,6 @@ export function Puzzles() {
           setStatus('correct');
           setMessage('✓ Correct! Well played!');
 
-          // Award XP if not already solved
           if (!solved.includes(activePuzzle.id)) {
             const newSolved = [...solved, activePuzzle.id];
             setSolved(newSolved);
@@ -115,11 +115,17 @@ export function Puzzles() {
                 .catch(() => {});
             }
           }
+
+          // Auto-advance to next puzzle after 2.5s
+          if (activePuzzle.id < PUZZLES.length) {
+            autoNextTimer.current = setTimeout(() => {
+              loadPuzzle(PUZZLES[activePuzzle.id]);
+            }, 2500);
+          }
         } else {
           soundManager.play('invalid');
           setStatus('wrong');
           setMessage('✗ Not quite. Try again!');
-          // Undo the wrong move after a brief pause
           responseTimer.current = setTimeout(() => {
             chess.undo();
             setFen(chess.fen());
@@ -133,13 +139,23 @@ export function Puzzles() {
         setValidMoves([]);
       }
     }
-  }, [status, chess, selectedSquare, activePuzzle, solved, user, updateUser]);
+  }, [status, chess, selectedSquare, activePuzzle, solved, user, updateUser, loadPuzzle]);
+
+  const handleGiveUp = () => {
+    clearTimeout(responseTimer.current);
+    clearTimeout(autoNextTimer.current);
+    setStatus('giveup');
+    setShowSolution(true);
+    setMessage('Solution revealed. Study the move and try the next puzzle!');
+    soundManager.play('invalid');
+  };
 
   const handleReset = () => {
     if (activePuzzle) loadPuzzle(activePuzzle);
   };
 
   const isCheck = chess.inCheck();
+  const solutionMove = activePuzzle?.solution[0];
 
   const totalSolved = solved.length;
   const totalPuzzles = PUZZLES.length;
@@ -208,12 +224,12 @@ export function Puzzles() {
             </div>
           ) : (
             <>
-              {/* Status banner */}
-              <div className={`puzzle-status-banner ${status === 'correct' ? 'puzz-correct' : status === 'wrong' ? 'puzz-wrong' : ''}`}>
-                {status === 'playing' && !message && (
-                  <span>{activePuzzle.description}</span>
-                )}
+              <div className={`puzzle-status-banner ${status === 'correct' ? 'puzz-correct' : status === 'wrong' ? 'puzz-wrong' : status === 'giveup' ? 'puzz-giveup' : ''}`}>
+                {status === 'playing' && !message && <span>{activePuzzle.description}</span>}
                 {message && <span>{message}</span>}
+                {status === 'correct' && activePuzzle.id < PUZZLES.length && (
+                  <span className="puzz-autonext"> — next puzzle in 2.5s…</span>
+                )}
               </div>
 
               <Canvas shadows camera={{ position: [0, 14, 11], fov: 45 }} style={{ background: '#2a1f14', flex: 1 }}>
@@ -228,6 +244,7 @@ export function Puzzles() {
                   onSquareClick={handleSquareClick}
                   isCheck={isCheck}
                   turn={chess.turn()}
+                  hintMove={showSolution && solutionMove ? solutionMove : null}
                 />
                 <OrbitControls enablePan={false} minDistance={7} maxDistance={26} maxPolarAngle={Math.PI / 2.1} />
               </Canvas>
@@ -268,11 +285,21 @@ export function Puzzles() {
               <div className="puzzle-success-block">
                 <div className="puzzle-success-icon">🎉</div>
                 <div>Puzzle solved!</div>
-                {!solved.includes(activePuzzle.id - 1) || activePuzzle.id === 1 ? (
+                {!wasAlreadySolved ? (
                   <div className="puzzle-xp-badge">+{activePuzzle.xp} XP earned</div>
                 ) : (
                   <div className="puzzle-xp-badge puzzle-xp-grey">Already earned</div>
                 )}
+              </div>
+            )}
+
+            {status === 'giveup' && (
+              <div className="puzzle-giveup-block">
+                <div className="puzzle-solution-label">Solution</div>
+                <div className="puzzle-solution-move">
+                  {solutionMove ? `${solutionMove.from} → ${solutionMove.to}` : '—'}
+                </div>
+                <p className="puzzle-giveup-note">The highlighted squares show the correct move.</p>
               </div>
             )}
 
@@ -282,12 +309,20 @@ export function Puzzles() {
                   💡 Show Hint
                 </button>
               )}
-              {showHint && (
+              {showHint && status === 'playing' && (
                 <div className="puzzle-hint-box">{activePuzzle.hint}</div>
               )}
+              {status === 'playing' && (
+                <button className="btn-danger-sm w-full" onClick={handleGiveUp}>
+                  🏳 Give Up / Show Solution
+                </button>
+              )}
               <button className="btn-secondary w-full" onClick={handleReset}>↺ Reset Puzzle</button>
-              {status === 'correct' && activePuzzle.id < PUZZLES.length && (
-                <button className="btn-primary w-full" onClick={() => loadPuzzle(PUZZLES[activePuzzle.id])}>
+              {(status === 'correct' || status === 'giveup') && activePuzzle.id < PUZZLES.length && (
+                <button className="btn-primary w-full" onClick={() => {
+                  clearTimeout(autoNextTimer.current);
+                  loadPuzzle(PUZZLES[activePuzzle.id]);
+                }}>
                   Next Puzzle →
                 </button>
               )}
