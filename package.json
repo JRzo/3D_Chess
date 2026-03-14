@@ -1,0 +1,26 @@
+{
+  "name": "3d-chess-gamified",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node server/index.js",
+    "server:dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.47.0",
+    "@react-three/fiber": "^8.0.27",
+    "axios": "^1.13.6",
+    "chess.js": "^1.4.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.13.1",
+    "three": "^0.155.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.0"
+  }
+}

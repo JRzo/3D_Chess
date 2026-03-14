@@ -1,0 +1,94 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+import { Navbar } from '../components/Navbar';
+import api from '../lib/api';
+
+const RANK_COLORS = { Legend:'#ffd700', Platinum:'#c8dde8', Gold:'#ffd700', Silver:'#c0c0c0', Bronze:'#cd7f32' };
+const RANK_ICONS  = { Legend:'👑', Platinum:'💎', Gold:'🥇', Silver:'🥈', Bronze:'🥉' };
+
+export function Home() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [recentGames, setRecentGames] = useState([]);
+
+  useEffect(() => {
+    api.get('/users').then(r => setLeaderboard(r.data)).catch(() => {});
+    if (user?._id) api.get(`/games/user/${user._id}`).then(r => setRecentGames(r.data)).catch(() => {});
+  }, [user?._id]);
+
+  const rank = user?.stats?.rank || 'Bronze';
+  const xpPct = Math.min(100, Math.round(((user?.stats?.xp || 0) / ((user?.stats?.level || 1) * 100)) * 100));
+
+  return (
+    <div className="page-root">
+      <Navbar />
+      <div className="home-content">
+
+        {/* Hero */}
+        <div className="home-hero">
+          <div className="hero-left">
+            <h2>Welcome back, <span className="accent">{user?.username}</span>!</h2>
+            <div className="hero-rank" style={{ color: RANK_COLORS[rank] }}>
+              {RANK_ICONS[rank]} {rank} · Level {user?.stats?.level}
+            </div>
+            <div className="hero-xp-bar"><div className="xp-fill" style={{ width: `${xpPct}%` }} /></div>
+            <div className="hero-xp-text">{user?.stats?.xp} / {(user?.stats?.level || 1) * 100} XP</div>
+            <div className="hero-pill-row">
+              <span className="pill">⚔ {user?.stats?.wins || 0} Wins</span>
+              <span className="pill">🏳 {user?.stats?.losses || 0} Losses</span>
+              <span className="pill">🤝 {user?.stats?.draws || 0} Draws</span>
+            </div>
+          </div>
+          <div className="hero-right">
+            <button className="btn-play" onClick={() => navigate('/bots')}>
+              <span>🤖</span> Play vs Bot
+            </button>
+            <button className="btn-play btn-play-2p" onClick={() => navigate('/game/solo')}>
+              <span>♟</span> Free Play
+            </button>
+            <button className="btn-secondary" onClick={() => navigate(`/profile/${user?._id}`)}>
+              View Profile
+            </button>
+          </div>
+        </div>
+
+        {/* Panels */}
+        <div className="home-panels">
+          <div className="panel">
+            <h3>🏆 Leaderboard</h3>
+            <div className="lb-list">
+              {leaderboard.slice(0, 10).map((p, i) => (
+                <div key={p._id} className="lb-row" onClick={() => navigate(`/profile/${p._id}`)}>
+                  <span className="lb-pos">#{i + 1}</span>
+                  <span className="lb-av">{p.avatar || '♟'}</span>
+                  <span className="lb-name">{p.username}</span>
+                  <span className="lb-tier" style={{ color: RANK_COLORS[p.stats?.rank] }}>{p.stats?.rank}</span>
+                  <span className="lb-xp">{(p.stats?.xp || 0) + (p.stats?.level || 1) * 100} pts</span>
+                </div>
+              ))}
+              {leaderboard.length === 0 && <p className="empty">No players yet — be the first!</p>}
+            </div>
+          </div>
+
+          <div className="panel">
+            <h3>🕐 Recent Games</h3>
+            <div className="games-list">
+              {recentGames.map(g => (
+                <div key={g._id} className="game-row">
+                  <span className="game-vs">{g.whiteUsername} vs {g.blackUsername || 'AI'}</span>
+                  <span className={`game-result res-${g.result}`}>
+                    {g.result === 'white' ? 'White wins' : g.result === 'black' ? 'Black wins' : g.result === 'draw' ? 'Draw' : g.result}
+                  </span>
+                </div>
+              ))}
+              {recentGames.length === 0 && <p className="empty">No games yet. Start playing!</p>}
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
