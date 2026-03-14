@@ -9,6 +9,7 @@ import { Board3D } from '../components/Board3D';
 import { soundManager } from '../lib/sounds';
 import { PUZZLES } from '../lib/puzzles';
 import api from '../lib/api';
+import { PUZZLES_KEY } from '../lib/constants';
 
 function getPieces(chess) {
   const FILES = ['a','b','c','d','e','f','g','h'];
@@ -32,8 +33,10 @@ export function Puzzles() {
   const { user, updateUser } = useAuth();
 
   const [solved, setSolved] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('chess3d-puzzles') || '[]'); }
-    catch { return []; }
+    try {
+      const raw = JSON.parse(localStorage.getItem(PUZZLES_KEY) || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch { return []; }
   });
 
   const [activePuzzle, setActivePuzzle] = useState(null);
@@ -105,7 +108,7 @@ export function Puzzles() {
           if (!solved.includes(activePuzzle.id)) {
             const newSolved = [...solved, activePuzzle.id];
             setSolved(newSolved);
-            localStorage.setItem('chess3d-puzzles', JSON.stringify(newSolved));
+            localStorage.setItem(PUZZLES_KEY, JSON.stringify(newSolved));
             if (user) {
               api.post('/games', {})
                 .then(r => api.post(`/games/${r.data._id}/complete`, {
@@ -116,10 +119,11 @@ export function Puzzles() {
             }
           }
 
-          // Auto-advance to next puzzle after 2.5s
-          if (activePuzzle.id < PUZZLES.length) {
+          // Auto-advance to next puzzle after 2.5s (only if not last)
+          const nextPuzzle = PUZZLES.find(p => p.id === activePuzzle.id + 1);
+          if (nextPuzzle) {
             autoNextTimer.current = setTimeout(() => {
-              loadPuzzle(PUZZLES[activePuzzle.id]);
+              loadPuzzle(nextPuzzle);
             }, 2500);
           }
         } else {
@@ -227,7 +231,7 @@ export function Puzzles() {
               <div className={`puzzle-status-banner ${status === 'correct' ? 'puzz-correct' : status === 'wrong' ? 'puzz-wrong' : status === 'giveup' ? 'puzz-giveup' : ''}`}>
                 {status === 'playing' && !message && <span>{activePuzzle.description}</span>}
                 {message && <span>{message}</span>}
-                {status === 'correct' && activePuzzle.id < PUZZLES.length && (
+                {status === 'correct' && PUZZLES.find(p => p.id === activePuzzle.id + 1) && (
                   <span className="puzz-autonext"> — next puzzle in 2.5s…</span>
                 )}
               </div>
@@ -318,14 +322,19 @@ export function Puzzles() {
                 </button>
               )}
               <button className="btn-secondary w-full" onClick={handleReset}>↺ Reset Puzzle</button>
-              {(status === 'correct' || status === 'giveup') && activePuzzle.id < PUZZLES.length && (
-                <button className="btn-primary w-full" onClick={() => {
-                  clearTimeout(autoNextTimer.current);
-                  loadPuzzle(PUZZLES[activePuzzle.id]);
-                }}>
-                  Next Puzzle →
-                </button>
-              )}
+              {(status === 'correct' || status === 'giveup') && (() => {
+                const next = PUZZLES.find(p => p.id === activePuzzle.id + 1);
+                return next ? (
+                  <button className="btn-primary w-full" onClick={() => {
+                    clearTimeout(autoNextTimer.current);
+                    loadPuzzle(next);
+                  }}>
+                    Next Puzzle →
+                  </button>
+                ) : (
+                  <div className="puzzle-all-done">🎉 All puzzles solved!</div>
+                );
+              })()}
               <button className="btn-ghost w-full" onClick={() => navigate('/home')}>← Home</button>
             </div>
           </div>

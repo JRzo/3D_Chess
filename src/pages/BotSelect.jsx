@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { BOT_LEVELS } from '../lib/bot';
+import { GAUNTLET_KEY } from '../lib/constants';
 
 function getGauntletProgress() {
-  try { return parseInt(localStorage.getItem('chess3d-gauntlet') || '0', 10); }
+  try { return parseInt(localStorage.getItem(GAUNTLET_KEY) || '0', 10); }
   catch { return 0; }
 }
 

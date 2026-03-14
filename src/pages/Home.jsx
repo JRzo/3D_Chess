@@ -3,16 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Navbar } from '../components/Navbar';
 import api from '../lib/api';
-
-const RANK_COLORS = { Legend:'#a855f7', Platinum:'#38bdf8', Gold:'#f59e0b', Silver:'#c0c0c0', Bronze:'#cd7f32' };
-const RANK_ICONS  = { Legend:'👑', Platinum:'💎', Gold:'🥇', Silver:'🥈', Bronze:'🥉' };
+import { RANK_COLORS, RANK_ICONS, PUZZLES_KEY, GAUNTLET_KEY } from '../lib/constants';
 
 function getPuzzlesSolved() {
-  try { return JSON.parse(localStorage.getItem('chess3d-puzzles') || '[]').length; }
+  try { return JSON.parse(localStorage.getItem(PUZZLES_KEY) || '[]').length; }
   catch { return 0; }
 }
 function getGauntletProgress() {
-  try { return parseInt(localStorage.getItem('chess3d-gauntlet') || '0', 10); }
+  try { return parseInt(localStorage.getItem(GAUNTLET_KEY) || '0', 10); }
   catch { return 0; }
 }
 

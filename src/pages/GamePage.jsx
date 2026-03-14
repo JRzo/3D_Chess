@@ -12,9 +12,8 @@ import { soundManager } from '../lib/sounds';
 import { getBotMove, BOT_LEVELS } from '../lib/bot';
 import { detectOpening } from '../lib/openings';
 import api from '../lib/api';
+import { RANK_COLORS, PIECE_SYM_B, PIECE_SYM_W, PIECE_MATERIAL, GAUNTLET_KEY } from '../lib/constants';
 
-const PIECE_SYM   = { p:'♟', r:'♜', n:'♞', b:'♝', q:'♛', k:'♚' };
-const PIECE_SYM_W = { p:'♙', r:'♖', n:'♘', b:'♗', q:'♕', k:'♔' };
 
 const TIME_OPTIONS = [
   { label: 'Bullet · 1 min',  seconds: 60,  tag: '⚡' },
@@ -47,8 +46,6 @@ function Clock({ seconds, active, flagged }) {
   );
 }
 
-const RANK_COLORS = { Legend:'#a855f7', Platinum:'#38bdf8', Gold:'#f59e0b', Silver:'#c0c0c0', Bronze:'#cd7f32' };
-const GAUNTLET_KEY = 'chess3d-gauntlet';
 
 export function GamePage() {
   const navigate = useNavigate();
@@ -67,6 +64,7 @@ export function GamePage() {
   const [showGameOver, setShowGameOver]   = useState(false);
   const [botThinking, setBotThinking]     = useState(false);
   const [saveError, setSaveError]         = useState(false);
+  const saveErrorTimer = useRef(null);
   const [timeControl, setTimeControl]     = useState(300);
   const [timeWhite, setTimeWhite]         = useState(300);
   const [timeBlack, setTimeBlack]         = useState(300);
@@ -94,12 +92,9 @@ export function GamePage() {
   } = useChess();
 
   // ── Material advantage ───────────────────────────────────────────────
-  const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
   const materialAdv = useMemo(() => {
-    let w = 0, b = 0;
-    capturedByWhite.forEach(p => { w += PIECE_VALUES[p] || 0; });
-    capturedByBlack.forEach(p => { b += PIECE_VALUES[p] || 0; });
-    return w - b; // positive = white ahead
+    const sum = arr => arr.reduce((acc, p) => acc + (PIECE_MATERIAL[p] || 0), 0);
+    return sum(capturedByWhite) - sum(capturedByBlack); // positive = white ahead
   }, [capturedByWhite, capturedByBlack]);
 
   // ── Detect opening name ──────────────────────────────────────────────
@@ -150,7 +145,11 @@ export function GamePage() {
   // ── Create game in DB ────────────────────────────────────────────────
   useEffect(() => {
     if (user) {
-      api.post('/games', {}).then(r => setGameId(r.data._id)).catch(() => setSaveError(true));
+      api.post('/games', {}).then(r => setGameId(r.data._id)).catch(() => {
+        setSaveError(true);
+        clearTimeout(saveErrorTimer.current);
+        saveErrorTimer.current = setTimeout(() => setSaveError(false), 5000);
+      });
     }
   }, []);
 
@@ -185,7 +184,11 @@ export function GamePage() {
     if (history.length === 1 && timeControl > 0) setTimerRunning(true);
     api.post(`/games/${gameId}/moves`, {
       from: m.from, to: m.to, piece: m.piece, san: m.san, fen,
-    }).catch(() => setSaveError(true));
+    }).catch(() => {
+      setSaveError(true);
+      clearTimeout(saveErrorTimer.current);
+      saveErrorTimer.current = setTimeout(() => setSaveError(false), 5000);
+    });
   }, [history.length, gameId, fen]);
 
   // ── Game over from chess rules ────────────────────────────────────────
@@ -416,7 +419,7 @@ export function GamePage() {
               <div className="cap-row">
                 <span className="cap-label">⬜</span>
                 <span className="cap-pieces">
-                  {capturedByWhite.length ? capturedByWhite.map((p,i) => <span key={i}>{PIECE_SYM[p]||p}</span>) : '—'}
+                  {capturedByWhite.length ? capturedByWhite.map((p,i) => <span key={i}>{PIECE_SYM_B[p]||p}</span>) : '—'}
                 </span>
               </div>
               <div className="cap-row">
