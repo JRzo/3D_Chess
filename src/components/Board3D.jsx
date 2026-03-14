@@ -5,25 +5,30 @@ import { ChessPiece3D } from './ChessPiece3D';
 const FILES = ['a','b','c','d','e','f','g','h'];
 const RANKS = ['1','2','3','4','5','6','7','8'];
 
-export function Board3D({ selectedSquare, validMoves, pieces, lastMove, onSquareClick, isCheck, turn }) {
+export function Board3D({ selectedSquare, validMoves, pieces, lastMove, onSquareClick, isCheck, turn, hintMove }) {
   const squares = useMemo(() => {
     return FILES.flatMap((file, col) =>
       RANKS.map((rank, row) => {
         const square = file + rank;
-        const isLight = (col + row) % 2 === 0;
-        const isSelected = square === selectedSquare;
-        const isValid = validMoves.includes(square);
-        const isLastFrom = lastMove?.from === square;
-        const isLastTo = lastMove?.to === square;
-        // Classical: light = cream, dark = deep mahogany
+        const isLight     = (col + row) % 2 === 0;
+        const isSelected  = square === selectedSquare;
+        const isValid     = validMoves.includes(square);
+        const isLastFrom  = lastMove?.from === square;
+        const isLastTo    = lastMove?.to   === square;
+        const isHintFrom  = hintMove?.from === square;
+        const isHintTo    = hintMove?.to   === square;
+
         let color = isLight ? '#f0d9b5' : '#b58863';
-        if (isSelected) color = '#f6f669';
-        else if (isValid) color = isLight ? '#cdd16b' : '#aaa23a';
+        if (isSelected)             color = '#f6f669';
+        else if (isValid)           color = isLight ? '#cdd16b' : '#aaa23a';
         else if (isLastFrom || isLastTo) color = isLight ? '#cdd16b' : '#aaa23a';
-        return { col, row, square, color, isValid };
+        else if (isHintFrom)        color = '#6ee7b7';   // mint green — hint source
+        else if (isHintTo)          color = '#34d399';   // brighter green — hint target
+
+        return { col, row, square, color, isValid, isHintFrom, isHintTo };
       })
     );
-  }, [selectedSquare, validMoves, lastMove]);
+  }, [selectedSquare, validMoves, lastMove, hintMove]);
 
   return (
     <group>
@@ -37,7 +42,7 @@ export function Board3D({ selectedSquare, validMoves, pieces, lastMove, onSquare
         <meshStandardMaterial color="#7a5230" metalness={0.05} roughness={0.95} />
       </mesh>
 
-      {squares.map(({ col, row, square, color, isValid }) => (
+      {squares.map(({ col, row, square, color, isValid, isHintFrom, isHintTo }) => (
         <group key={square}>
           <mesh
             position={[col - 3.5, 0.02, row - 3.5]}
@@ -47,10 +52,28 @@ export function Board3D({ selectedSquare, validMoves, pieces, lastMove, onSquare
             <boxGeometry args={[1, 0.04, 1]} />
             <meshStandardMaterial color={color} />
           </mesh>
+
+          {/* Valid-move dot */}
           {isValid && (
             <mesh position={[col - 3.5, 0.06, row - 3.5]}>
               <cylinderGeometry args={[0.18, 0.18, 0.025, 20]} />
               <meshStandardMaterial color="#f6f669" emissive="#aaa23a" emissiveIntensity={0.4} transparent opacity={0.75} />
+            </mesh>
+          )}
+
+          {/* Hint arrow ring — source square */}
+          {isHintFrom && (
+            <mesh position={[col - 3.5, 0.07, row - 3.5]}>
+              <torusGeometry args={[0.38, 0.07, 8, 24]} />
+              <meshStandardMaterial color="#6ee7b7" emissive="#6ee7b7" emissiveIntensity={0.7} transparent opacity={0.9} />
+            </mesh>
+          )}
+
+          {/* Hint arrow ring — target square */}
+          {isHintTo && (
+            <mesh position={[col - 3.5, 0.07, row - 3.5]}>
+              <cylinderGeometry args={[0.34, 0.34, 0.04, 24]} />
+              <meshStandardMaterial color="#34d399" emissive="#34d399" emissiveIntensity={0.8} transparent opacity={0.85} />
             </mesh>
           )}
         </group>

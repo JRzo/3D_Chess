@@ -7,26 +7,37 @@ import api from '../lib/api';
 const RANK_COLORS = { Legend:'#ffd700', Platinum:'#c8dde8', Gold:'#ffd700', Silver:'#c0c0c0', Bronze:'#cd7f32' };
 const RANK_ICONS  = { Legend:'👑', Platinum:'💎', Gold:'🥇', Silver:'🥈', Bronze:'🥉' };
 
+function getPuzzlesSolved() {
+  try { return JSON.parse(localStorage.getItem('chess3d-puzzles') || '[]').length; }
+  catch { return 0; }
+}
+function getGauntletProgress() {
+  try { return parseInt(localStorage.getItem('chess3d-gauntlet') || '0', 10); }
+  catch { return 0; }
+}
+
 export function Home() {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
   const [leaderboard, setLeaderboard] = useState([]);
   const [recentGames, setRecentGames] = useState([]);
+  const [puzzlesSolved]    = useState(getPuzzlesSolved);
+  const [gauntletProgress] = useState(getGauntletProgress);
 
   useEffect(() => {
     api.get('/users').then(r => setLeaderboard(r.data)).catch(() => {});
     if (user?._id) api.get(`/games/user/${user._id}`).then(r => setRecentGames(r.data)).catch(() => {});
   }, [user?._id]);
 
-  const rank = user?.stats?.rank || 'Bronze';
-  const xpPct = Math.min(100, Math.round(((user?.stats?.xp || 0) / ((user?.stats?.level || 1) * 100)) * 100));
+  const rank   = user?.stats?.rank || 'Bronze';
+  const xpPct  = Math.min(100, Math.round(((user?.stats?.xp || 0) / ((user?.stats?.level || 1) * 100)) * 100));
 
   return (
     <div className="page-root">
       <Navbar />
       <div className="home-content">
 
-        {/* Hero */}
+        {/* ── Hero ──────────────────────────────────────────────────── */}
         <div className="home-hero">
           <div className="hero-left">
             <h2>Welcome back, <span className="accent">{user?.username}</span>!</h2>
@@ -36,17 +47,24 @@ export function Home() {
             <div className="hero-xp-bar"><div className="xp-fill" style={{ width: `${xpPct}%` }} /></div>
             <div className="hero-xp-text">{user?.stats?.xp} / {(user?.stats?.level || 1) * 100} XP</div>
             <div className="hero-pill-row">
-              <span className="pill">⚔ {user?.stats?.wins || 0} Wins</span>
-              <span className="pill">🏳 {user?.stats?.losses || 0} Losses</span>
-              <span className="pill">🤝 {user?.stats?.draws || 0} Draws</span>
+              <span className="pill">⚔ {user?.stats?.wins    || 0} Wins</span>
+              <span className="pill">🏳 {user?.stats?.losses  || 0} Losses</span>
+              <span className="pill">🤝 {user?.stats?.draws   || 0} Draws</span>
+              <span className="pill">🧩 {puzzlesSolved} Puzzles</span>
+              {gauntletProgress > 0 && (
+                <span className="pill" style={{ color: '#b58863' }}>⚔️ Gauntlet {gauntletProgress}/5</span>
+              )}
             </div>
           </div>
           <div className="hero-right">
             <button className="btn-play" onClick={() => navigate('/bots')}>
               <span>🤖</span> Play vs Bot
             </button>
-            <button className="btn-play btn-play-2p" onClick={() => navigate('/game/solo')}>
-              <span>♟</span> Free Play
+            <button className="btn-play btn-play-2p" onClick={() => {
+              const randomDiff = Math.floor(Math.random() * 5) + 1;
+              navigate(`/game/bot?difficulty=${randomDiff}`);
+            }}>
+              <span>♟</span> Quick Play
             </button>
             <button className="btn-secondary" onClick={() => navigate(`/profile/${user?._id}`)}>
               View Profile
@@ -54,7 +72,30 @@ export function Home() {
           </div>
         </div>
 
-        {/* Panels */}
+        {/* ── Feature cards ─────────────────────────────────────────── */}
+        <div className="home-features">
+          <button className="feature-card" onClick={() => navigate('/puzzles')}>
+            <div className="feature-card-icon">🧩</div>
+            <div className="feature-card-body">
+              <div className="feature-card-title">Puzzle Training</div>
+              <div className="feature-card-desc">Solve tactical puzzles to earn XP and sharpen your skills.</div>
+              <div className="feature-card-progress">{puzzlesSolved} / 8 solved</div>
+            </div>
+            <span className="feature-card-arrow">→</span>
+          </button>
+
+          <button className="feature-card" onClick={() => navigate('/gauntlet')}>
+            <div className="feature-card-icon">⚔️</div>
+            <div className="feature-card-body">
+              <div className="feature-card-title">Bot Gauntlet</div>
+              <div className="feature-card-desc">Beat all 5 bots in sequence to become the Champion.</div>
+              <div className="feature-card-progress">{gauntletProgress} / 5 defeated</div>
+            </div>
+            <span className="feature-card-arrow">→</span>
+          </button>
+        </div>
+
+        {/* ── Panels ────────────────────────────────────────────────── */}
         <div className="home-panels">
           <div className="panel">
             <h3>🏆 Leaderboard</h3>
@@ -81,6 +122,7 @@ export function Home() {
                   <span className={`game-result res-${g.result}`}>
                     {g.result === 'white' ? 'White wins' : g.result === 'black' ? 'Black wins' : g.result === 'draw' ? 'Draw' : g.result}
                   </span>
+                  {g.resultReason && <span className="game-reason">{g.resultReason}</span>}
                 </div>
               ))}
               {recentGames.length === 0 && <p className="empty">No games yet. Start playing!</p>}
