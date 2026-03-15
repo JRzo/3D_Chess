@@ -1,39 +1,73 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import User from '../models/User.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'chess3d-secret-2024';
 
-router.post('/signup', async (req, res) => {
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is not set');
+
+// 10 attempts per 15 minutes per IP on auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many attempts, please try again later' },
+});
+
+const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+router.post('/signup', authLimiter, async (req, res) => {
   try {
     const { username, email, password } = req.body;
+
     if (!username || !email || !password)
       return res.status(400).json({ message: 'All fields required' });
 
-    const existing = await User.findOne({ $or: [{ email }, { username }] });
+    if (!USERNAME_RE.test(username))
+      return res.status(400).json({ message: 'Username must be 3–20 alphanumeric characters' });
+
+    if (!EMAIL_RE.test(email))
+      return res.status(400).json({ message: 'Invalid email address' });
+
+    if (typeof password !== 'string' || password.length < 8)
+      return res.status(400).json({ message: 'Password must be at least 8 characters' });
+
+    const existing = await User.findOne({ $or: [{ email: email.toLowerCase() }, { username }] });
     if (existing) return res.status(400).json({ message: 'Username or email already taken' });
 
     const hashed = await bcrypt.hash(password, 12);
-    const user = new User({ username, email, password: hashed });
+    const user = new User({ username, email: email.toLowerCase(), password: hashed });
     await user.save();
 
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
     const { password: _, ...userData } = user.toObject();
     res.status(201).json({ token, user: userData });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('signup error:', err);
+    res.status(500).json({ message: 'An error occurred. Please try again.' });
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
 
-    const valid = await bcrypt.compare(password, user.password);
+    if (!email || !password)
+      return res.status(400).json({ message: 'All fields required' });
+
+    const user = await User.findOne({ email: String(email).toLowerCase() });
+
+    // Always run bcrypt to prevent timing-based email enumeration
+    const DUMMY_HASH = '$2a$12$dummyhashfordummycompare000000000000000000000000000000';
+    const valid = user
+      ? await bcrypt.compare(password, user.password)
+      : await bcrypt.compare(password, DUMMY_HASH).then(() => false);
+
     if (!valid) return res.status(400).json({ message: 'Invalid credentials' });
 
     user.lastActive = new Date();
@@ -43,7 +77,8 @@ router.post('/login', async (req, res) => {
     const { password: _, ...userData } = user.toObject();
     res.json({ token, user: userData });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('login error:', err);
+    res.status(500).json({ message: 'An error occurred. Please try again.' });
   }
 });
 
