@@ -249,6 +249,7 @@ export function Puzzles() {
                   isCheck={isCheck}
                   turn={chess.turn()}
                   hintMove={showSolution && solutionMove ? solutionMove : null}
+                  boardStyle={user?.settings?.boardStyle || 'wood'}
                 />
                 <OrbitControls enablePan={false} minDistance={7} maxDistance={26} maxPolarAngle={Math.PI / 2.1} />
               </Canvas>

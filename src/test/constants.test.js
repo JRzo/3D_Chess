@@ -117,12 +117,12 @@ describe('rankIcon()', () => {
 // ── puzzles.js ────────────────────────────────────────────────────────────────
 
 describe('PUZZLES array', () => {
-  it('contains 8 puzzles', () => {
-    expect(PUZZLES.length).toBe(8);
+  it('contains 20 puzzles', () => {
+    expect(PUZZLES.length).toBe(20);
   });
 
-  it('IDs are 1-8 in order', () => {
-    expect(PUZZLES.map(p => p.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  it('IDs are 1-20 in order', () => {
+    expect(PUZZLES.map(p => p.id)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]);
   });
 
   it('every puzzle has required fields', () => {
@@ -161,8 +161,8 @@ describe('getPuzzle()', () => {
 });
 
 describe('Puzzle auto-advance navigation', () => {
-  it('find-based lookup returns next puzzle for ids 1-7', () => {
-    for (let i = 1; i <= 7; i++) {
+  it('find-based lookup returns next puzzle for ids 1 through second-to-last', () => {
+    for (let i = 1; i < PUZZLES.length; i++) {
       const current = PUZZLES.find(p => p.id === i);
       const next = PUZZLES.find(p => p.id === current.id + 1);
       expect(next).toBeDefined();
@@ -170,7 +170,7 @@ describe('Puzzle auto-advance navigation', () => {
     }
   });
 
-  it('find-based lookup returns undefined for the last puzzle (id=8)', () => {
+  it('find-based lookup returns undefined for the last puzzle', () => {
     const last = PUZZLES[PUZZLES.length - 1];
     const next = PUZZLES.find(p => p.id === last.id + 1);
     expect(next).toBeUndefined();
