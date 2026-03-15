@@ -1,14 +1,16 @@
 import express from 'express';
 import { isValidObjectId } from 'mongoose';
+import { Chess } from 'chess.js';
 import Game from '../models/Game.js';
 import User from '../models/User.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
+const STARTING_FEN   = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const VALID_RESULTS  = new Set(['white', 'black', 'draw']);
 const SQUARE_RE      = /^[a-h][1-8]$/;
-const PIECE_RE       = /^[prnbqkPRNBQK]$/;
+const PROMO_RE       = /^[qrbn]$/;
 const VALID_TIME_CONTROLS = new Set([60, 180, 300, 600, 900, 1800, 0]);
 
 router.post('/', authenticate, async (req, res) => {
@@ -25,6 +27,7 @@ router.post('/', authenticate, async (req, res) => {
       blackUsername: 'AI',
       timeControl,
       status: 'active',
+      fen: STARTING_FEN,
     });
     await game.save();
     res.status(201).json(game);
@@ -69,30 +72,42 @@ router.post('/:id/moves', authenticate, async (req, res) => {
     if (!isValidObjectId(req.params.id))
       return res.status(400).json({ message: 'Invalid game ID' });
 
-    const { from, to, piece, san, fen } = req.body;
+    const { from, to, promotion } = req.body;
 
-    // Validate move fields
     if (!SQUARE_RE.test(from) || !SQUARE_RE.test(to))
       return res.status(400).json({ message: 'Invalid move squares' });
-    if (piece && !PIECE_RE.test(piece))
-      return res.status(400).json({ message: 'Invalid piece' });
-    if (typeof san !== 'string' || san.length > 10)
-      return res.status(400).json({ message: 'Invalid SAN notation' });
-    if (typeof fen !== 'string' || fen.length > 100)
-      return res.status(400).json({ message: 'Invalid FEN string' });
+
+    if (promotion !== undefined && !PROMO_RE.test(promotion))
+      return res.status(400).json({ message: 'Invalid promotion piece' });
 
     const game = await Game.findById(req.params.id);
     if (!game) return res.status(404).json({ message: 'Game not found' });
 
-    // Only the white player (the human) may post moves in single-player games
     if (game.white?.toString() !== req.userId)
       return res.status(403).json({ message: 'Forbidden' });
 
     if (game.status !== 'active')
       return res.status(409).json({ message: 'Game is not active' });
 
-    game.moves.push({ from, to, piece, san, fen });
-    game.fen = fen;
+    // Server-side move validation — reconstruct position from authoritative FEN
+    const chess = new Chess(game.fen || STARTING_FEN);
+    let validated;
+    try {
+      validated = chess.move({ from, to, promotion: promotion || 'q' });
+    } catch {
+      validated = null;
+    }
+    if (!validated) return res.status(400).json({ message: 'Illegal move' });
+
+    // Store server-computed values, never trust client-provided FEN/SAN
+    game.moves.push({
+      from:  validated.from,
+      to:    validated.to,
+      piece: validated.piece,
+      san:   validated.san,
+      fen:   chess.fen(),
+    });
+    game.fen = chess.fen();
     await game.save();
     res.json(game);
   } catch (err) {
@@ -151,12 +166,28 @@ router.post('/:id/complete', authenticate, async (req, res) => {
     const game = await Game.findById(req.params.id);
     if (!game) return res.status(404).json({ message: 'Game not found' });
 
-    // Only the white player (the authenticated human) may complete a game
     if (game.white?.toString() !== req.userId)
       return res.status(403).json({ message: 'Forbidden' });
 
     if (game.status === 'completed')
       return res.status(409).json({ message: 'Game already completed' });
+
+    // Server-side result verification for checkmate/stalemate/draw
+    // Resignation and timeout are trusted (player chose to concede)
+    const isConcession = resultReason === 'resignation' || resultReason === 'timeout';
+    if (!isConcession) {
+      const chess = new Chess(game.fen || STARTING_FEN);
+      if (!chess.isGameOver()) {
+        return res.status(400).json({ message: 'Game is not over in the stored position' });
+      }
+      // Verify claimed result matches actual outcome
+      let expectedResult;
+      if (chess.isCheckmate())     expectedResult = chess.turn() === 'w' ? 'black' : 'white';
+      else if (chess.isDraw())     expectedResult = 'draw';
+      if (expectedResult && expectedResult !== result) {
+        return res.status(400).json({ message: 'Result does not match game state' });
+      }
+    }
 
     game.result = result;
     game.resultReason = resultReason;

@@ -24,6 +24,8 @@ const userSchema = new mongoose.Schema({
     boardStyle: { type: String, default: 'wood' },
     showTutorial: { type: Boolean, default: true },
   },
+  failedLoginAttempts: { type: Number, default: 0 },
+  lockoutUntil: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   lastActive: { type: Date, default: Date.now },
 });

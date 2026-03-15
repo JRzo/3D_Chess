@@ -201,7 +201,7 @@ export function GamePage() {
     setEvalScore(score);
     if (!gameId) return;
     api.post(`/games/${gameId}/moves`, {
-      from: m.from, to: m.to, piece: m.piece, san: m.san, fen,
+      from: m.from, to: m.to, ...(m.promotion && { promotion: m.promotion }),
     }).catch(() => {
       setSaveError(true);
       clearTimeout(saveErrorTimer.current);
