@@ -54,6 +54,12 @@ export function Home() {
               {gauntletProgress > 0 && (
                 <span className="pill" style={{ color: '#b58863' }}>⚔️ Gauntlet {gauntletProgress}/5</span>
               )}
+              {(user?.currentWinStreak || 0) > 1 && (
+                <span className="pill pill-streak">🔥 {user.currentWinStreak} streak</span>
+              )}
+              {(user?.puzzleStreak || 0) > 1 && (
+                <span className="pill pill-streak">🧩🔥 {user.puzzleStreak} day streak</span>
+              )}
             </div>
           </div>
           <div className="hero-right">
@@ -113,7 +119,7 @@ export function Home() {
                   <span className="lb-av">{p.avatar || '♟'}</span>
                   <span className="lb-name">{p.username}{p._id === user?._id ? ' (you)' : ''}</span>
                   <span className="lb-tier" style={{ color: RANK_COLORS[p.stats?.rank] || '#cd7f32' }}>{p.stats?.rank || 'Bronze'}</span>
-                  <span className="lb-xp">{p.stats?.xp || 0} XP</span>
+                  <span className="lb-elo">{p.elo || 1200}</span>
                 </div>
               ))}
               {!lbLoading && leaderboard.length === 0 && <p className="empty">No players yet — be the first!</p>}

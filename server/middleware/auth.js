@@ -1,7 +1,11 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is not set');
+// JWT_SECRET is loaded from .env by index.js before any request arrives
+const getSecret = () => {
+  const s = process.env.JWT_SECRET;
+  if (!s) throw new Error('JWT_SECRET environment variable is not set');
+  return s;
+};
 
 export const authenticate = (req, res, next) => {
   // Prefer httpOnly cookie; fall back to Authorization header (for API tools / curl)
@@ -10,7 +14,7 @@ export const authenticate = (req, res, next) => {
 
   if (!token) return res.status(401).json({ message: 'No token provided' });
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getSecret());
     req.userId = decoded.userId;
     next();
   } catch {

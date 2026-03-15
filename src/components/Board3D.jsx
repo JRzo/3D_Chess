@@ -35,9 +35,14 @@ const THEMES = {
 
 export function Board3D({
   selectedSquare, validMoves, pieces, lastMove,
-  onSquareClick, isCheck, turn, hintMove, boardStyle = 'wood',
+  onSquareClick, isCheck, turn, hintMove, boardStyle = 'wood', flipped = false,
 }) {
   const theme = THEMES[boardStyle] || THEMES.wood;
+
+  // Map col/row to 3D x/z, accounting for flip
+  const toPos = (col, row) => flipped
+    ? [3.5 - col, 0.02, 3.5 - row]
+    : [col - 3.5, 0.02, row - 3.5];
 
   const squares = useMemo(() => {
     return FILES.flatMap((file, col) =>
@@ -61,10 +66,14 @@ export function Board3D({
         return { col, row, square, color, isLight, isValid, isHintFrom, isHintTo };
       })
     );
-  }, [selectedSquare, validMoves, lastMove, hintMove, theme]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSquare, validMoves, lastMove, hintMove, theme, flipped]);
 
-  // Emissive tint for neon board squares
   const isNeon = boardStyle === 'neon';
+
+  // Labels: when flipped, h→a and 8→1
+  const fileLabels = flipped ? [...FILES].reverse() : FILES;
+  const rankLabels = flipped ? [...RANKS].reverse() : RANKS;
 
   return (
     <group>
@@ -78,71 +87,75 @@ export function Board3D({
         <meshStandardMaterial color={theme.frame2} metalness={isNeon ? 0.5 : 0.05} roughness={isNeon ? 0.4 : 0.95} />
       </mesh>
 
-      {squares.map(({ col, row, square, color, isValid, isHintFrom, isHintTo }) => (
-        <group key={square}>
-          <mesh
-            position={[col - 3.5, 0.02, row - 3.5]}
-            receiveShadow
-            onClick={e => { e.stopPropagation(); onSquareClick(square); }}
-          >
-            <boxGeometry args={[1, 0.04, 1]} />
-            <meshStandardMaterial
-              color={color}
-              emissive={isNeon ? color : '#000000'}
-              emissiveIntensity={isNeon ? 0.15 : 0}
-            />
-          </mesh>
-
-          {/* Valid-move dot */}
-          {isValid && (
-            <mesh position={[col - 3.5, 0.06, row - 3.5]}>
-              <cylinderGeometry args={[0.18, 0.18, 0.025, 20]} />
+      {squares.map(({ col, row, square, color, isValid, isHintFrom, isHintTo }) => {
+        const [px, py, pz] = toPos(col, row);
+        return (
+          <group key={square}>
+            <mesh
+              position={[px, py, pz]}
+              receiveShadow
+              onClick={e => { e.stopPropagation(); onSquareClick(square); }}
+            >
+              <boxGeometry args={[1, 0.04, 1]} />
               <meshStandardMaterial
-                color={isNeon ? theme.valid[0] : '#f6f669'}
-                emissive={isNeon ? theme.valid[0] : '#aaa23a'}
-                emissiveIntensity={isNeon ? 0.9 : 0.4}
-                transparent opacity={0.75}
+                color={color}
+                emissive={isNeon ? color : '#000000'}
+                emissiveIntensity={isNeon ? 0.15 : 0}
               />
             </mesh>
-          )}
 
-          {/* Hint ring — source square */}
-          {isHintFrom && (
-            <mesh position={[col - 3.5, 0.07, row - 3.5]}>
-              <torusGeometry args={[0.38, 0.07, 8, 24]} />
-              <meshStandardMaterial
-                color={theme.hintFrom}
-                emissive={theme.hintFrom}
-                emissiveIntensity={isNeon ? 1.2 : 0.7}
-                transparent opacity={0.9}
-              />
-            </mesh>
-          )}
+            {/* Valid-move dot */}
+            {isValid && (
+              <mesh position={[px, py + 0.04, pz]}>
+                <cylinderGeometry args={[0.18, 0.18, 0.025, 20]} />
+                <meshStandardMaterial
+                  color={isNeon ? theme.valid[0] : '#f6f669'}
+                  emissive={isNeon ? theme.valid[0] : '#aaa23a'}
+                  emissiveIntensity={isNeon ? 0.9 : 0.4}
+                  transparent opacity={0.75}
+                />
+              </mesh>
+            )}
 
-          {/* Hint disc — target square */}
-          {isHintTo && (
-            <mesh position={[col - 3.5, 0.07, row - 3.5]}>
-              <cylinderGeometry args={[0.34, 0.34, 0.04, 24]} />
-              <meshStandardMaterial
-                color={theme.hintTo}
-                emissive={theme.hintTo}
-                emissiveIntensity={isNeon ? 1.2 : 0.8}
-                transparent opacity={0.85}
-              />
-            </mesh>
-          )}
-        </group>
-      ))}
+            {/* Hint ring — source square */}
+            {isHintFrom && (
+              <mesh position={[px, py + 0.05, pz]}>
+                <torusGeometry args={[0.38, 0.07, 8, 24]} />
+                <meshStandardMaterial
+                  color={theme.hintFrom}
+                  emissive={theme.hintFrom}
+                  emissiveIntensity={isNeon ? 1.2 : 0.7}
+                  transparent opacity={0.9}
+                />
+              </mesh>
+            )}
+
+            {/* Hint disc — target square */}
+            {isHintTo && (
+              <mesh position={[px, py + 0.05, pz]}>
+                <cylinderGeometry args={[0.34, 0.34, 0.04, 24]} />
+                <meshStandardMaterial
+                  color={theme.hintTo}
+                  emissive={theme.hintTo}
+                  emissiveIntensity={isNeon ? 1.2 : 0.8}
+                  transparent opacity={0.85}
+                />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
 
       {/* Pieces */}
       {pieces.map(({ square, piece, color, col, row }) => {
+        const [px, , pz] = toPos(col, row);
         const isKingInCheck = piece === 'k' && isCheck && color === turn;
         return (
           <ChessPiece3D
             key={square}
             piece={piece}
             color={color}
-            position={[col - 3.5, 0.08, row - 3.5]}
+            position={[px, 0.08, pz]}
             selected={selectedSquare === square}
             inCheck={isKingInCheck}
             onClick={e => { e.stopPropagation(); onSquareClick(square); }}
@@ -152,12 +165,12 @@ export function Board3D({
       })}
 
       {/* Rank / file labels */}
-      {FILES.map((f, i) => (
+      {fileLabels.map((f, i) => (
         <Html key={`f${f}`} position={[i - 3.5, 0.06, -4.6]} center>
           <span style={{ color: theme.label, fontSize: '11px', fontWeight: '700', userSelect: 'none' }}>{f}</span>
         </Html>
       ))}
-      {RANKS.map((r, i) => (
+      {rankLabels.map((r, i) => (
         <Html key={`r${r}`} position={[-4.6, 0.06, i - 3.5]} center>
           <span style={{ color: theme.label, fontSize: '11px', fontWeight: '700', userSelect: 'none' }}>{r}</span>
         </Html>

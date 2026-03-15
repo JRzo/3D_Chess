@@ -78,6 +78,7 @@ export function Profile() {
             ['🤝', 'Draws',   stats.draws   || 0],
             ['📊', 'Win Rate',`${winRate}%`     ],
             ['🎮', 'Total',   stats.totalGames || 0],
+            ['📈', 'ELO',     profile.elo   || 1200],
           ].map(([icon, l, v]) => (
             <div key={l} className="stat-card">
               <div className="stat-icon">{icon}</div>
@@ -87,13 +88,42 @@ export function Profile() {
           ))}
         </div>
 
+        {/* Win streak info */}
+        {(profile.bestWinStreak > 0 || profile.currentWinStreak > 0) && (
+          <div className="streak-banner">
+            {profile.currentWinStreak > 1 && (
+              <span className="streak-pill">🔥 Current streak: <strong>{profile.currentWinStreak}</strong></span>
+            )}
+            {profile.bestWinStreak > 0 && (
+              <span className="streak-pill">🏆 Best streak: <strong>{profile.bestWinStreak}</strong></span>
+            )}
+            {profile.puzzleStreak > 1 && (
+              <span className="streak-pill">🧩 Puzzle streak: <strong>{profile.puzzleStreak} days</strong></span>
+            )}
+          </div>
+        )}
+
         <div className="profile-sections">
           <div className="profile-section">
             <h3>🏆 Achievements</h3>
             <div className="ach-grid">
-              {achievements.map((a, i) => (
-                <div key={i} className="ach-badge">🏆 {a.name}</div>
-              ))}
+              {achievements.map((a, i) => {
+                const name = a.name || '';
+                const icon = name.includes('Win') || name.includes('Victory') ? '⚔'
+                  : name.includes('Level') ? '⭐'
+                  : name.includes('Streak') || name.includes('Hat') || name.includes('Hot') || name.includes('Unstoppable') ? '🔥'
+                  : name.includes('Draw') || name.includes('Diplomat') ? '🤝'
+                  : name.includes('ELO') || name.includes('Star') || name.includes('Expert') || name.includes('Master') ? '📈'
+                  : name.includes('First') ? '🌟'
+                  : name.includes('Centurion') || name.includes('Century') ? '💯'
+                  : '🏆';
+                return (
+                  <div key={i} className="ach-badge">
+                    <span className="ach-icon">{icon}</span>
+                    <span className="ach-name">{name}</span>
+                  </div>
+                );
+              })}
               {achievements.length === 0 && <p className="empty">No achievements yet. Keep playing!</p>}
             </div>
           </div>

@@ -15,8 +15,8 @@ export function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (mode === 'signup' && form.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (mode === 'signup' && form.password.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
     setLoading(true);
@@ -71,7 +71,7 @@ export function Login() {
                 {showPw ? '🙈' : '👁'}
               </button>
             </div>
-            {mode === 'signup' && <div className="form-hint">At least 6 characters</div>}
+            {mode === 'signup' && <div className="form-hint">At least 8 characters</div>}
           </div>
           {error && <div className="form-error">{error}</div>}
           <button type="submit" className="btn-primary w-full" disabled={loading}>

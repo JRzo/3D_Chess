@@ -13,8 +13,8 @@ const ALLOWED_BOARDS  = new Set(['wood', 'marble', 'neon']);
 router.get('/', async (req, res) => {
   try {
     const users = await User.find()
-      .select('username stats avatar createdAt')
-      .sort({ 'stats.xp': -1 })
+      .select('username stats avatar elo currentWinStreak bestWinStreak createdAt')
+      .sort({ elo: -1 })
       .limit(50);
     res.json(users);
   } catch (err) {
@@ -92,6 +92,33 @@ router.put('/me', authenticate, async (req, res) => {
     res.json(user);
   } catch (err) {
     console.error('PUT /users/me error:', err);
+    res.status(500).json({ message: 'An error occurred. Please try again.' });
+  }
+});
+
+// POST /users/me/puzzle-solved — record daily puzzle streak
+router.post('/me/puzzle-solved', authenticate, async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.lastPuzzleDate === today) {
+      // Already recorded today — idempotent
+      return res.json({ puzzleStreak: user.puzzleStreak, alreadySolved: true });
+    }
+
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    if (user.lastPuzzleDate === yesterday) {
+      user.puzzleStreak = (user.puzzleStreak || 0) + 1;
+    } else {
+      user.puzzleStreak = 1; // streak broken or first ever
+    }
+    user.lastPuzzleDate = today;
+    await user.save();
+    res.json({ puzzleStreak: user.puzzleStreak, alreadySolved: false });
+  } catch (err) {
+    console.error('POST /users/me/puzzle-solved error:', err);
     res.status(500).json({ message: 'An error occurred. Please try again.' });
   }
 });

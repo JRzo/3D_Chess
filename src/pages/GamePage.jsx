@@ -47,6 +47,50 @@ function Clock({ seconds, active, flagged }) {
   );
 }
 
+// ── Blunder detection ────────────────────────────────────────────────────────
+// Returns classification string for a move given eval before/after (white-perspective centipawns)
+function classifyMove(evalBefore, evalAfter, playerColor) {
+  // From player's perspective: positive = better for player
+  const delta = playerColor === 'w'
+    ? evalAfter - evalBefore
+    : evalBefore - evalAfter;
+
+  if (delta >= 2.0)   return 'brilliant'; // !!
+  if (delta >= 0.0)   return 'good';      //
+  if (delta >= -0.5)  return 'inaccuracy'; // ?!
+  if (delta >= -1.5)  return 'mistake';    // ?
+  return 'blunder';                        // ??
+}
+
+const MOVE_ANNOTATIONS = {
+  brilliant: { symbol: '!!', cls: 'ann-brilliant', label: 'Brilliant' },
+  good:      { symbol: '',   cls: '',              label: '' },
+  inaccuracy:{ symbol: '?!', cls: 'ann-inaccuracy',label: 'Inaccuracy' },
+  mistake:   { symbol: '?',  cls: 'ann-mistake',   label: 'Mistake' },
+  blunder:   { symbol: '??', cls: 'ann-blunder',   label: 'Blunder' },
+};
+
+function analyzeGame(fenHistory, moveList) {
+  if (fenHistory.length < 2) return [];
+  const annotations = [];
+  for (let i = 0; i < moveList.length; i++) {
+    const fenBefore = i === 0 ? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' : fenHistory[i - 1];
+    const fenAfter  = fenHistory[i];
+    if (!fenBefore || !fenAfter) { annotations.push('good'); continue; }
+    try {
+      const chessBefore = new Chess(fenBefore);
+      const chessAfter  = new Chess(fenAfter);
+      const evalBefore = getStaticEval(chessBefore);
+      const evalAfter  = getStaticEval(chessAfter);
+      const playerColor = moveList[i].color || (i % 2 === 0 ? 'w' : 'b');
+      annotations.push(classifyMove(evalBefore, evalAfter, playerColor));
+    } catch {
+      annotations.push('good');
+    }
+  }
+  return annotations;
+}
+
 
 export function GamePage() {
   const navigate = useNavigate();
@@ -80,22 +124,30 @@ export function GamePage() {
   const [copied, setCopied]               = useState(false);
 
   // ── Move navigation (review mode) ────────────────────────────────────
-  const [fenHistory, setFenHistory]       = useState([]);   // FEN after each half-move
-  const [viewIndex, setViewIndex]         = useState(null); // null = live, 0..n-1 = reviewing
+  const [fenHistory, setFenHistory]       = useState([]);
+  const [viewIndex, setViewIndex]         = useState(null);
   const isReviewing = viewIndex !== null;
 
   // ── Promotion dialog ─────────────────────────────────────────────────
-  const [pendingPromotion, setPendingPromotion] = useState(null); // {from, to}
+  const [pendingPromotion, setPendingPromotion] = useState(null);
 
   // ── Evaluation bar ───────────────────────────────────────────────────
-  const [evalScore, setEvalScore]         = useState(0); // in pawn units (+ = white)
+  const [evalScore, setEvalScore]         = useState(0);
+
+  // ── Board flip ───────────────────────────────────────────────────────
+  const [flipped, setFlipped]             = useState(false);
+
+  // ── ELO change display ───────────────────────────────────────────────
+  const [eloChange, setEloChange]         = useState(null);
+
+  // ── Post-game blunder analysis ────────────────────────────────────────
+  const [moveAnnotations, setMoveAnnotations] = useState([]);
 
   const prevHistLen  = useRef(0);
   const botTimeout   = useRef(null);
   const timerRef     = useRef(null);
   const hintTimer    = useRef(null);
   const moveHistRef  = useRef(null);
-  // Tracks bot's turn synchronously — prevents stale-state double-move.
   const botTurnRef   = useRef(false);
 
   const {
@@ -106,7 +158,7 @@ export function GamePage() {
   // ── Material advantage ───────────────────────────────────────────────
   const materialAdv = useMemo(() => {
     const sum = arr => arr.reduce((acc, p) => acc + (PIECE_MATERIAL[p] || 0), 0);
-    return sum(capturedByWhite) - sum(capturedByBlack); // positive = white ahead
+    return sum(capturedByWhite) - sum(capturedByBlack);
   }, [capturedByWhite, capturedByBlack]);
 
   // ── Detect opening name ──────────────────────────────────────────────
@@ -121,6 +173,43 @@ export function GamePage() {
       moveHistRef.current.scrollTop = moveHistRef.current.scrollHeight;
     }
   }, [history.length]);
+
+  // ── Keyboard shortcuts ───────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e) => {
+      // Don't fire if typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (fenHistory.length === 0) return;
+        const cur = viewIndex ?? fenHistory.length;
+        if (cur > 0) setViewIndex(cur - 1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (!isReviewing) return;
+        const next = viewIndex + 1;
+        if (next >= fenHistory.length) setViewIndex(null);
+        else setViewIndex(next);
+      } else if (e.key === 'ArrowUp' || e.key === 'Home') {
+        e.preventDefault();
+        if (fenHistory.length > 0) setViewIndex(0);
+      } else if (e.key === 'ArrowDown' || e.key === 'End') {
+        e.preventDefault();
+        setViewIndex(null);
+      } else if (e.key === 'f' || e.key === 'F') {
+        setFlipped(v => !v);
+      } else if (e.key === 'h' || e.key === 'H') {
+        if (!showGameOver && !flagged && !botThinking) handleHint();
+      } else if (e.key === 'Escape') {
+        if (isReviewing) setViewIndex(null);
+        if (showResignConfirm) setShowResignConfirm(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fenHistory.length, viewIndex, isReviewing, showGameOver, flagged, botThinking, showResignConfirm]);
 
   // ── Timer tick ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -147,10 +236,15 @@ export function GamePage() {
     setShowGameOver(true);
     soundManager.play('checkmate');
     if (gameId && user) {
-      const winner = flagged === 'w' ? 'black' : 'white';
       api.post(`/games/${gameId}/complete`, {
-        result: winner, resultReason: 'timeout', pgn: chess.pgn(),
-      }).then(({ data }) => { if (data.user) updateUser(data.user); }).catch(() => {});
+        result: flagged === 'w' ? 'black' : 'white',
+        resultReason: 'timeout',
+        pgn: chess.pgn(),
+        botLevel: difficulty,
+      }).then(({ data }) => {
+        if (data.user) updateUser(data.user);
+        if (data.eloChange !== undefined) setEloChange(data.eloChange);
+      }).catch(() => {});
     }
   }, [flagged]);
 
@@ -194,9 +288,7 @@ export function GamePage() {
     prevHistLen.current = history.length;
     const m = history[history.length - 1];
     if (history.length === 1 && timeControl > 0) setTimerRunning(true);
-    // Track FEN history for move navigation
     setFenHistory(prev => [...prev, fen]);
-    // Update eval bar (non-blocking)
     const score = getStaticEval(chess);
     setEvalScore(score);
     if (!gameId) return;
@@ -217,27 +309,35 @@ export function GamePage() {
     clearInterval(timerRef.current);
     soundManager.play(gameOver.reason === 'checkmate' ? 'checkmate' : 'move');
 
-    // Gauntlet: if player (white) won, advance progress
+    // Run blunder analysis
+    const annotations = analyzeGame(fenHistory, history);
+    setMoveAnnotations(annotations);
+
     if (isGauntlet && gameOver.winner === 'white') {
       try {
         const current = parseInt(localStorage.getItem(GAUNTLET_KEY) || '0', 10);
-        if (difficulty > current) {
-          localStorage.setItem(GAUNTLET_KEY, String(difficulty));
-        }
+        if (difficulty > current) localStorage.setItem(GAUNTLET_KEY, String(difficulty));
       } catch {}
     }
 
     if (gameId && user) {
       api.post(`/games/${gameId}/complete`, {
         result: gameOver.winner, resultReason: gameOver.reason, pgn: chess.pgn(),
+        botLevel: difficulty,
       }).then(({ data }) => {
         if (data.user) {
           updateUser(data.user);
           if (data.user.stats?.level > (user.stats?.level || 1)) {
-            setAchievement(`Reached Level ${data.user.stats.level}!`);
             soundManager.play('levelup');
           }
+          // Show first new non-level achievement
+          if (data.newAchievements?.length) {
+            setAchievement(data.newAchievements[0]);
+          } else if (data.user.stats?.level > (user.stats?.level || 1)) {
+            setAchievement(`Reached Level ${data.user.stats.level}!`);
+          }
         }
+        if (data.eloChange !== undefined) setEloChange(data.eloChange);
       }).catch(() => {});
     }
   }, [gameOver]);
@@ -248,11 +348,9 @@ export function GamePage() {
     if (isBotGame && (botTurnRef.current || chess.turn() !== 'w')) return;
     if (botThinking) return;
 
-    // Clear hint on any click
     setHintMove(null);
     clearTimeout(hintTimer.current);
 
-    // Detect pawn promotion before executing the move
     if (selectedSquare) {
       const piece = chess.get(selectedSquare);
       const isPromotion = piece?.type === 'p' &&
@@ -286,13 +384,11 @@ export function GamePage() {
     if (isBotGame && chess.turn() !== 'w') return;
     setHintLoading(true);
     clearTimeout(hintTimer.current);
-    // Run async to not block UI
     setTimeout(() => {
       const move = getBotMove(chess, Math.min(difficulty + 1, 4) || 3);
       setHintMove(move || null);
       setHintLoading(false);
       soundManager.play('select');
-      // Auto-clear hint after 4 s
       hintTimer.current = setTimeout(() => setHintMove(null), 4000);
     }, 80);
   }, [hintLoading, gameOver, flagged, botThinking, chess, difficulty, isBotGame]);
@@ -322,7 +418,6 @@ export function GamePage() {
 
   const exitReview = useCallback(() => setViewIndex(null), []);
 
-  // Get pieces for the currently-viewed position (or live if not reviewing)
   const reviewPieces = useMemo(() => {
     if (!isReviewing || fenHistory.length === 0) return null;
     const targetFen = fenHistory[viewIndex];
@@ -349,12 +444,20 @@ export function GamePage() {
     setTimerRunning(false);
     clearInterval(timerRef.current);
     soundManager.play('checkmate');
+
+    const annotations = analyzeGame(fenHistory, history);
+    setMoveAnnotations(annotations);
+
     if (gameId && user) {
       api.post(`/games/${gameId}/complete`, {
         result: 'black', resultReason: 'resignation', pgn: chess.pgn(),
-      }).then(({ data }) => { if (data.user) updateUser(data.user); }).catch(() => {});
+        botLevel: difficulty,
+      }).then(({ data }) => {
+        if (data.user) updateUser(data.user);
+        if (data.eloChange !== undefined) setEloChange(data.eloChange);
+      }).catch(() => {});
     }
-  }, [gameOver, flagged, gameId, user, chess, updateUser]);
+  }, [gameOver, flagged, gameId, user, chess, updateUser, fenHistory, history, difficulty]);
 
   // ── Copy PGN ─────────────────────────────────────────────────────────
   const handleCopyPGN = () => {
@@ -384,6 +487,8 @@ export function GamePage() {
     setFenHistory([]);
     setViewIndex(null);
     setEvalScore(0);
+    setEloChange(null);
+    setMoveAnnotations([]);
     botTurnRef.current = false;
     setTimeWhite(t); setTimeBlack(t);
     setTimerRunning(false);
@@ -405,8 +510,12 @@ export function GamePage() {
   const resultWinner = gameOver?.winner
     || (flagged === 'w' ? 'black' : flagged === 'b' ? 'white' : null);
 
-  // ── Gauntlet next opponent ─────────────────────────────────────────────
   const gauntletWon = isGauntlet && gameOver?.winner === 'white' && difficulty < 5;
+
+  // Count blunders/mistakes in annotations
+  const blunderCount  = moveAnnotations.filter(a => a === 'blunder').length;
+  const mistakeCount  = moveAnnotations.filter(a => a === 'mistake').length;
+  const brilliantCount = moveAnnotations.filter(a => a === 'brilliant').length;
 
   return (
     <div className="page-root">
@@ -477,14 +586,14 @@ export function GamePage() {
               <h4>Moves</h4>
               {history.length > 0 && (
                 <div className="move-nav-btns">
-                  <button className="mnav-btn" onClick={() => goToMove(0)} disabled={viewIndex === 0} title="First move">⏮</button>
-                  <button className="mnav-btn" onClick={() => goToMove((viewIndex ?? fenHistory.length) - 1)} disabled={viewIndex === 0} title="Previous">◀</button>
+                  <button className="mnav-btn" onClick={() => goToMove(0)} disabled={viewIndex === 0} title="First (↑)">⏮</button>
+                  <button className="mnav-btn" onClick={() => goToMove((viewIndex ?? fenHistory.length) - 1)} disabled={viewIndex === 0} title="Prev (←)">◀</button>
                   <button className="mnav-btn" onClick={() => {
                     const next = viewIndex === null ? null : viewIndex + 1;
                     if (next === null || next >= fenHistory.length) exitReview();
                     else goToMove(next);
-                  }} disabled={!isReviewing} title="Next">▶</button>
-                  <button className="mnav-btn" onClick={exitReview} disabled={!isReviewing} title="Last move">⏭</button>
+                  }} disabled={!isReviewing} title="Next (→)">▶</button>
+                  <button className="mnav-btn" onClick={exitReview} disabled={!isReviewing} title="Last (↓)">⏭</button>
                 </div>
               )}
             </div>
@@ -495,18 +604,32 @@ export function GamePage() {
                   <span
                     className={`mw${viewIndex === i ? ' mv-active' : ''}`}
                     onClick={() => goToMove(i)}
-                  >{history[i]?.san}</span>
+                  >
+                    {history[i]?.san}
+                    {moveAnnotations[i] && MOVE_ANNOTATIONS[moveAnnotations[i]]?.symbol && (
+                      <span className={`move-ann ${MOVE_ANNOTATIONS[moveAnnotations[i]].cls}`}>
+                        {MOVE_ANNOTATIONS[moveAnnotations[i]].symbol}
+                      </span>
+                    )}
+                  </span>
                   <span
                     className={`mb${viewIndex === i + 1 ? ' mv-active' : ''}`}
                     onClick={() => history[i + 1] && goToMove(i + 1)}
-                  >{history[i + 1]?.san || ''}</span>
+                  >
+                    {history[i + 1]?.san || ''}
+                    {history[i + 1] && moveAnnotations[i + 1] && MOVE_ANNOTATIONS[moveAnnotations[i + 1]]?.symbol && (
+                      <span className={`move-ann ${MOVE_ANNOTATIONS[moveAnnotations[i + 1]].cls}`}>
+                        {MOVE_ANNOTATIONS[moveAnnotations[i + 1]].symbol}
+                      </span>
+                    )}
+                  </span>
                 </div>
               ))}
               {history.length === 0 && <p className="empty">No moves yet</p>}
             </div>
             {isReviewing && (
               <div className="review-banner">
-                👁 Reviewing move {viewIndex + 1}/{fenHistory.length} — click board to return
+                👁 Reviewing move {viewIndex + 1}/{fenHistory.length} — Esc to return
               </div>
             )}
           </div>
@@ -567,6 +690,14 @@ export function GamePage() {
           {hintMove && (
             <div className="hint-banner">💡 Hint: move the highlighted piece</div>
           )}
+
+          {/* Flip button */}
+          <button
+            className={`flip-btn ${flipped ? 'flip-btn-active' : ''}`}
+            onClick={() => setFlipped(v => !v)}
+            title="Flip board (F)"
+          >⇅</button>
+
           <Canvas shadows camera={{ position: [0, 14, 11], fov: 45 }} style={{ background: '#2a1f14' }}>
             <ambientLight intensity={0.45} />
             <directionalLight position={[8, 18, 8]} intensity={1.1} castShadow shadow-mapSize={[2048, 2048]} />
@@ -584,6 +715,7 @@ export function GamePage() {
               turn={turn}
               hintMove={isReviewing ? null : hintMove}
               boardStyle={user?.settings?.boardStyle || 'wood'}
+              flipped={flipped}
             />
             <OrbitControls enablePan={false} minDistance={7} maxDistance={26} maxPolarAngle={Math.PI / 2.1} />
           </Canvas>
@@ -599,6 +731,19 @@ export function GamePage() {
               <div className="hud-rank" style={{ color: RANK_COLORS[user?.stats?.rank] }}>
                 {user?.stats?.rank || 'Bronze'}
               </div>
+              {user?.elo && (
+                <div className="hud-elo">
+                  ELO <span className="elo-val">{user.elo}</span>
+                  {eloChange !== null && eloChange !== 0 && (
+                    <span className={`elo-delta ${eloChange > 0 ? 'elo-up' : 'elo-dn'}`}>
+                      {eloChange > 0 ? `+${eloChange}` : eloChange}
+                    </span>
+                  )}
+                </div>
+              )}
+              {user?.currentWinStreak > 1 && (
+                <div className="hud-streak">🔥 {user.currentWinStreak} win streak</div>
+              )}
             </div>
 
             {/* XP bar */}
@@ -627,9 +772,15 @@ export function GamePage() {
               ))}
             </div>
 
+            {/* Keyboard shortcut legend */}
+            <div className="kbd-legend">
+              <span className="kbd">←→</span> review &nbsp;
+              <span className="kbd">F</span> flip &nbsp;
+              <span className="kbd">H</span> hint
+            </div>
+
             {/* Actions */}
             <div className="hud-actions">
-              {/* Hint button — only in bot or solo games, and only on your turn */}
               {!gameOver && !flagged && (
                 <button
                   className={`btn-hint w-full ${hintLoading ? 'btn-hint-loading' : ''}`}
@@ -640,9 +791,15 @@ export function GamePage() {
                 </button>
               )}
 
+              <button
+                className={`btn-secondary w-full ${flipped ? 'btn-flipped' : ''}`}
+                onClick={() => setFlipped(v => !v)}
+              >
+                {flipped ? '⇅ Unflip' : '⇅ Flip Board'}
+              </button>
+
               <button className="btn-secondary w-full" onClick={handleReset}>New Game</button>
 
-              {/* Resign button */}
               {!gameOver && !flagged && history.length > 0 && (
                 <button className="btn-danger-sm w-full" onClick={() => setShowResignConfirm(true)}>
                   🏳 Resign
@@ -729,8 +886,22 @@ export function GamePage() {
             {xpGain !== null && (
               <div className="go-xp">+{xpGain} XP {resultWinner === 'white' ? '🎉' : ''}</div>
             )}
+            {eloChange !== null && eloChange !== 0 && (
+              <div className={`go-elo ${eloChange > 0 ? 'elo-up' : 'elo-dn'}`}>
+                ELO {eloChange > 0 ? `+${eloChange}` : eloChange} → {user?.elo || '?'}
+              </div>
+            )}
 
-            {/* PGN copy */}
+            {/* Blunder summary */}
+            {moveAnnotations.length > 0 && (
+              <div className="go-analysis">
+                {brilliantCount > 0 && <span className="ann-brilliant">!! {brilliantCount} brilliant</span>}
+                {mistakeCount   > 0 && <span className="ann-mistake">?  {mistakeCount} mistake{mistakeCount > 1 ? 's' : ''}</span>}
+                {blunderCount   > 0 && <span className="ann-blunder">?? {blunderCount} blunder{blunderCount > 1 ? 's' : ''}</span>}
+                {blunderCount === 0 && mistakeCount === 0 && <span className="ann-good">Clean game! ✓</span>}
+              </div>
+            )}
+
             {history.length > 0 && (
               <button className="btn-ghost go-pgn-btn" onClick={handleCopyPGN}>
                 {copied ? '✓ Copied!' : '📋 Copy PGN'}
