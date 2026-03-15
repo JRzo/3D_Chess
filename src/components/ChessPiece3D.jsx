@@ -11,6 +11,10 @@ const MAT = {
   w: { color: '#f2ede0', roughness: 0.35, metalness: 0.06 },
   b: { color: '#231f1a', roughness: 0.30, metalness: 0.12 },
 };
+const MAT_NEON = {
+  w: { color: '#00ffcc', roughness: 0.1, metalness: 0.8, emissive: '#00ffcc', emissiveIntensity: 0.3 },
+  b: { color: '#ff3366', roughness: 0.1, metalness: 0.8, emissive: '#ff3366', emissiveIntensity: 0.3 },
+};
 const SEL_COLOR = '#b58863';
 const CHECK_COLOR = '#c0392b';
 
@@ -42,8 +46,8 @@ function useFloat(active, baseY) {
 }
 
 // ── Pawn ──────────────────────────────────────────────────────────────
-function Pawn({ color, pos, selected }) {
-  const mat = MAT[color];
+function Pawn({ color, pos, selected, neon }) {
+  const mat = neon ? MAT_NEON[color] : MAT[color];
   const ref = useFloat(selected, pos[1]);
   const geo = useMemo(() => lathe([
     [0.30, 0.00],[0.30, 0.04],[0.26, 0.07],
@@ -62,8 +66,8 @@ function Pawn({ color, pos, selected }) {
 }
 
 // ── Rook ──────────────────────────────────────────────────────────────
-function Rook({ color, pos, selected }) {
-  const mat = MAT[color];
+function Rook({ color, pos, selected, neon }) {
+  const mat = neon ? MAT_NEON[color] : MAT[color];
   const ref = useFloat(selected, pos[1]);
   const body = useMemo(() => lathe([
     [0.32, 0.00],[0.32, 0.04],[0.28, 0.07],
@@ -75,7 +79,6 @@ function Rook({ color, pos, selected }) {
       <mesh geometry={body} castShadow>
         <meshStandardMaterial {...mat} />
       </mesh>
-      {/* battlements: 4 small blocks on top */}
       {[0, 90, 180, 270].map((deg, i) => (
         <mesh key={i}
           position={[Math.cos(deg * Math.PI / 180) * 0.14, 0.62, Math.sin(deg * Math.PI / 180) * 0.14]}
@@ -91,8 +94,8 @@ function Rook({ color, pos, selected }) {
 }
 
 // ── Knight ────────────────────────────────────────────────────────────
-function Knight({ color, pos, selected }) {
-  const mat = MAT[color];
+function Knight({ color, pos, selected, neon }) {
+  const mat = neon ? MAT_NEON[color] : MAT[color];
   const ref = useFloat(selected, pos[1]);
   const base = useMemo(() => lathe([
     [0.30, 0.00],[0.30, 0.04],[0.26, 0.07],
@@ -100,26 +103,21 @@ function Knight({ color, pos, selected }) {
   ]), []);
   return (
     <group ref={ref} position={pos}>
-      {/* base */}
       <mesh geometry={base} castShadow>
         <meshStandardMaterial {...mat} />
       </mesh>
-      {/* neck post */}
       <mesh position={[0, 0.26, 0.04]} castShadow>
         <cylinderGeometry args={[0.1, 0.13, 0.12, 12]} />
         <meshStandardMaterial {...mat} />
       </mesh>
-      {/* horse head body */}
       <mesh position={[0, 0.38, 0.06]} castShadow>
         <boxGeometry args={[0.18, 0.28, 0.28]} />
         <meshStandardMaterial {...mat} />
       </mesh>
-      {/* snout */}
       <mesh position={[0, 0.30, 0.20]} castShadow>
         <boxGeometry args={[0.12, 0.12, 0.14]} />
         <meshStandardMaterial {...mat} />
       </mesh>
-      {/* ears */}
       {[-0.06, 0.06].map((x, i) => (
         <mesh key={i} position={[x, 0.56, 0.02]} castShadow>
           <coneGeometry args={[0.04, 0.10, 6]} />
@@ -132,8 +130,8 @@ function Knight({ color, pos, selected }) {
 }
 
 // ── Bishop ────────────────────────────────────────────────────────────
-function Bishop({ color, pos, selected }) {
-  const mat = MAT[color];
+function Bishop({ color, pos, selected, neon }) {
+  const mat = neon ? MAT_NEON[color] : MAT[color];
   const ref = useFloat(selected, pos[1]);
   const geo = useMemo(() => lathe([
     [0.30, 0.00],[0.30, 0.04],[0.26, 0.07],
@@ -146,7 +144,6 @@ function Bishop({ color, pos, selected }) {
       <mesh geometry={geo} castShadow>
         <meshStandardMaterial {...mat} />
       </mesh>
-      {/* mitre tip */}
       <mesh position={[0, 0.76, 0]} castShadow>
         <sphereGeometry args={[0.05, 10, 10]} />
         <meshStandardMaterial {...mat} />
@@ -157,8 +154,8 @@ function Bishop({ color, pos, selected }) {
 }
 
 // ── Queen ─────────────────────────────────────────────────────────────
-function Queen({ color, pos, selected }) {
-  const mat = MAT[color];
+function Queen({ color, pos, selected, neon }) {
+  const mat = neon ? MAT_NEON[color] : MAT[color];
   const ref = useFloat(selected, pos[1]);
   const geo = useMemo(() => lathe([
     [0.34, 0.00],[0.34, 0.04],[0.28, 0.08],
@@ -171,7 +168,6 @@ function Queen({ color, pos, selected }) {
       <mesh geometry={geo} castShadow>
         <meshStandardMaterial {...mat} />
       </mesh>
-      {/* crown points */}
       {[0, 1, 2, 3, 4, 5, 6].map(i => {
         const a = (i / 7) * Math.PI * 2;
         return (
@@ -187,8 +183,8 @@ function Queen({ color, pos, selected }) {
 }
 
 // ── King ──────────────────────────────────────────────────────────────
-function King({ color, pos, selected, inCheck }) {
-  const mat = MAT[color];
+function King({ color, pos, selected, inCheck, neon = false }) {
+  const mat = neon ? MAT_NEON[color] : MAT[color];
   const ref = useFloat(selected || inCheck, pos[1]);
   const geo = useMemo(() => lathe([
     [0.36, 0.00],[0.36, 0.04],[0.30, 0.08],
@@ -224,12 +220,12 @@ function King({ color, pos, selected, inCheck }) {
 
 const MAP = { p: Pawn, r: Rook, n: Knight, b: Bishop, q: Queen, k: King };
 
-export function ChessPiece3D({ piece, color, position, selected, inCheck, onClick }) {
+export function ChessPiece3D({ piece, color, position, selected, inCheck, onClick, neon = false }) {
   const Comp = MAP[piece];
   if (!Comp) return null;
   return (
     <group onClick={onClick}>
-      <Comp color={color} pos={position} selected={selected} inCheck={inCheck} />
+      <Comp color={color} pos={position} selected={selected} inCheck={inCheck} neon={neon} />
     </group>
   );
 }

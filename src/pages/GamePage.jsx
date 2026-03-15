@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stars } from '@react-three/drei';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Chess } from 'chess.js';
 import { useChess } from '../hooks/useChess';
 import { useAuth } from '../hooks/useAuth';
 import { Board3D } from '../components/Board3D';
@@ -9,7 +10,7 @@ import { Tutorial } from '../components/Tutorial';
 import { AchievementPopup } from '../components/AchievementPopup';
 import { Navbar } from '../components/Navbar';
 import { soundManager } from '../lib/sounds';
-import { getBotMove, BOT_LEVELS } from '../lib/bot';
+import { getBotMove, BOT_LEVELS, getStaticEval } from '../lib/bot';
 import { detectOpening } from '../lib/openings';
 import api from '../lib/api';
 import { RANK_COLORS, PIECE_SYM_B, PIECE_SYM_W, PIECE_MATERIAL, GAUNTLET_KEY } from '../lib/constants';
@@ -77,6 +78,17 @@ export function GamePage() {
   const [hintLoading, setHintLoading]     = useState(false);
   const [showResignConfirm, setShowResignConfirm] = useState(false);
   const [copied, setCopied]               = useState(false);
+
+  // ── Move navigation (review mode) ────────────────────────────────────
+  const [fenHistory, setFenHistory]       = useState([]);   // FEN after each half-move
+  const [viewIndex, setViewIndex]         = useState(null); // null = live, 0..n-1 = reviewing
+  const isReviewing = viewIndex !== null;
+
+  // ── Promotion dialog ─────────────────────────────────────────────────
+  const [pendingPromotion, setPendingPromotion] = useState(null); // {from, to}
+
+  // ── Evaluation bar ───────────────────────────────────────────────────
+  const [evalScore, setEvalScore]         = useState(0); // in pawn units (+ = white)
 
   const prevHistLen  = useRef(0);
   const botTimeout   = useRef(null);
@@ -176,12 +188,18 @@ export function GamePage() {
     return () => clearTimeout(botTimeout.current);
   }, [fen, turn, isBotGame, difficulty, flagged]);
 
-  // ── Save moves to DB ─────────────────────────────────────────────────
+  // ── Save moves to DB + update fenHistory + eval ──────────────────────
   useEffect(() => {
-    if (!gameId || history.length === 0 || history.length === prevHistLen.current) return;
+    if (history.length === 0 || history.length === prevHistLen.current) return;
     prevHistLen.current = history.length;
     const m = history[history.length - 1];
     if (history.length === 1 && timeControl > 0) setTimerRunning(true);
+    // Track FEN history for move navigation
+    setFenHistory(prev => [...prev, fen]);
+    // Update eval bar (non-blocking)
+    const score = getStaticEval(chess);
+    setEvalScore(score);
+    if (!gameId) return;
     api.post(`/games/${gameId}/moves`, {
       from: m.from, to: m.to, piece: m.piece, san: m.san, fen,
     }).catch(() => {
@@ -226,13 +244,27 @@ export function GamePage() {
 
   // ── Player square click ──────────────────────────────────────────────
   const handleSquareClick = useCallback((square) => {
-    if (showGameOver || flagged) return;
+    if (showGameOver || flagged || isReviewing) return;
     if (isBotGame && (botTurnRef.current || chess.turn() !== 'w')) return;
     if (botThinking) return;
 
     // Clear hint on any click
     setHintMove(null);
     clearTimeout(hintTimer.current);
+
+    // Detect pawn promotion before executing the move
+    if (selectedSquare) {
+      const piece = chess.get(selectedSquare);
+      const isPromotion = piece?.type === 'p' &&
+        ((piece.color === 'w' && square[1] === '8') ||
+         (piece.color === 'b' && square[1] === '1'));
+      const isLegal = chess.moves({ square: selectedSquare, verbose: true })
+        .some(m => m.to === square);
+      if (isPromotion && isLegal) {
+        setPendingPromotion({ from: selectedSquare, to: square });
+        return;
+      }
+    }
 
     const move = selectSquare(square);
     if (move) {
@@ -246,7 +278,7 @@ export function GamePage() {
     } else {
       soundManager.play('select');
     }
-  }, [selectSquare, showGameOver, flagged, chess, isBotGame, botThinking]);
+  }, [selectSquare, showGameOver, flagged, chess, isBotGame, botThinking, selectedSquare, isReviewing]);
 
   // ── Hint ─────────────────────────────────────────────────────────────
   const handleHint = useCallback(() => {
@@ -264,6 +296,50 @@ export function GamePage() {
       hintTimer.current = setTimeout(() => setHintMove(null), 4000);
     }, 80);
   }, [hintLoading, gameOver, flagged, botThinking, chess, difficulty, isBotGame]);
+
+  // ── Promotion choice ─────────────────────────────────────────────────
+  const handlePromotion = useCallback((piece) => {
+    if (!pendingPromotion) return;
+    const { from, to } = pendingPromotion;
+    setPendingPromotion(null);
+    const move = makeMove(from, to, piece);
+    if (move) {
+      if (isBotGame) botTurnRef.current = true;
+      soundManager.play(move.captured ? 'capture' : 'move');
+      if (chess.inCheck()) soundManager.play('check');
+      if (move.captured) {
+        if (move.color === 'w') setCapturedByWhite(p => [...p, move.captured]);
+        else setCapturedByBlack(p => [...p, move.captured]);
+      }
+    }
+  }, [pendingPromotion, makeMove, chess, isBotGame]);
+
+  // ── Move navigation helpers ───────────────────────────────────────────
+  const goToMove = useCallback((idx) => {
+    if (idx < 0 || idx >= fenHistory.length) return;
+    setViewIndex(idx);
+  }, [fenHistory.length]);
+
+  const exitReview = useCallback(() => setViewIndex(null), []);
+
+  // Get pieces for the currently-viewed position (or live if not reviewing)
+  const reviewPieces = useMemo(() => {
+    if (!isReviewing || fenHistory.length === 0) return null;
+    const targetFen = fenHistory[viewIndex];
+    if (!targetFen) return null;
+    const tmpChess = new Chess(targetFen);
+    const FILES2 = ['a','b','c','d','e','f','g','h'];
+    const RANKS2 = ['1','2','3','4','5','6','7','8'];
+    const pieces = [];
+    FILES2.forEach((file, col) => {
+      RANKS2.forEach((rank, row) => {
+        const sq = file + rank;
+        const p = tmpChess.get(sq);
+        if (p) pieces.push({ square: sq, piece: p.type, color: p.color, col, row });
+      });
+    });
+    return pieces;
+  }, [isReviewing, viewIndex, fenHistory]);
 
   // ── Resign ────────────────────────────────────────────────────────────
   const handleResign = useCallback(() => {
@@ -304,6 +380,10 @@ export function GamePage() {
     setHintMove(null);
     setHintLoading(false);
     setShowResignConfirm(false);
+    setPendingPromotion(null);
+    setFenHistory([]);
+    setViewIndex(null);
+    setEvalScore(0);
     botTurnRef.current = false;
     setTimeWhite(t); setTimeBlack(t);
     setTimerRunning(false);
@@ -393,17 +473,42 @@ export function GamePage() {
 
           {/* Move history */}
           <div className="sidebar-panel">
-            <h4>Moves</h4>
+            <div className="move-history-header">
+              <h4>Moves</h4>
+              {history.length > 0 && (
+                <div className="move-nav-btns">
+                  <button className="mnav-btn" onClick={() => goToMove(0)} disabled={viewIndex === 0} title="First move">⏮</button>
+                  <button className="mnav-btn" onClick={() => goToMove((viewIndex ?? fenHistory.length) - 1)} disabled={viewIndex === 0} title="Previous">◀</button>
+                  <button className="mnav-btn" onClick={() => {
+                    const next = viewIndex === null ? null : viewIndex + 1;
+                    if (next === null || next >= fenHistory.length) exitReview();
+                    else goToMove(next);
+                  }} disabled={!isReviewing} title="Next">▶</button>
+                  <button className="mnav-btn" onClick={exitReview} disabled={!isReviewing} title="Last move">⏭</button>
+                </div>
+              )}
+            </div>
             <div className="move-history" ref={moveHistRef}>
               {history.map((_, i) => i % 2 === 0 && (
                 <div key={i} className="move-row">
                   <span className="mn">{Math.floor(i / 2) + 1}.</span>
-                  <span className="mw">{history[i]?.san}</span>
-                  <span className="mb">{history[i + 1]?.san || ''}</span>
+                  <span
+                    className={`mw${viewIndex === i ? ' mv-active' : ''}`}
+                    onClick={() => goToMove(i)}
+                  >{history[i]?.san}</span>
+                  <span
+                    className={`mb${viewIndex === i + 1 ? ' mv-active' : ''}`}
+                    onClick={() => history[i + 1] && goToMove(i + 1)}
+                  >{history[i + 1]?.san || ''}</span>
                 </div>
               ))}
               {history.length === 0 && <p className="empty">No moves yet</p>}
             </div>
+            {isReviewing && (
+              <div className="review-banner">
+                👁 Reviewing move {viewIndex + 1}/{fenHistory.length} — click board to return
+              </div>
+            )}
           </div>
 
           {/* Captured pieces + material advantage */}
@@ -431,6 +536,25 @@ export function GamePage() {
             </div>
           </div>
 
+          {/* Evaluation bar */}
+          <div className="sidebar-panel eval-panel">
+            <h4>Evaluation
+              <span className="eval-score">
+                {evalScore > 0 ? `+${evalScore.toFixed(1)}` : evalScore.toFixed(1)}
+              </span>
+            </h4>
+            <div className="eval-bar-wrap">
+              <div
+                className="eval-bar-white"
+                style={{ height: `${Math.min(95, Math.max(5, 50 + evalScore * 3))}%` }}
+              />
+              <div className="eval-bar-labels">
+                <span>⬜</span>
+                <span>⬛</span>
+              </div>
+            </div>
+          </div>
+
           {saveError && <div className="sidebar-panel save-warn">⚠ Moves not saving</div>}
         </div>
 
@@ -449,14 +573,17 @@ export function GamePage() {
             <pointLight position={[-8, 8, -8]} intensity={0.4} color="#6ee7b7" />
             <Stars radius={120} depth={60} count={2500} factor={3} fade />
             <Board3D
-              selectedSquare={selectedSquare}
-              validMoves={validMoves}
-              pieces={getPieces()}
-              lastMove={lastMove}
-              onSquareClick={handleSquareClick}
-              isCheck={isCheck}
+              selectedSquare={isReviewing ? null : selectedSquare}
+              validMoves={isReviewing ? [] : validMoves}
+              pieces={reviewPieces || getPieces()}
+              lastMove={isReviewing && viewIndex > 0
+                ? { from: history[viewIndex - 1]?.from, to: history[viewIndex - 1]?.to }
+                : isReviewing && viewIndex === 0 ? null : lastMove}
+              onSquareClick={isReviewing ? exitReview : handleSquareClick}
+              isCheck={isReviewing ? false : isCheck}
               turn={turn}
-              hintMove={hintMove}
+              hintMove={isReviewing ? null : hintMove}
+              boardStyle={user?.settings?.boardStyle || 'wood'}
             />
             <OrbitControls enablePan={false} minDistance={7} maxDistance={26} maxPolarAngle={Math.PI / 2.1} />
           </Canvas>
@@ -540,6 +667,28 @@ export function GamePage() {
           </div>
         </div>
       </div>
+
+      {/* ─ Promotion dialog ─────────────────────────────────────────── */}
+      {pendingPromotion && (
+        <div className="overlay-backdrop">
+          <div className="promo-card">
+            <h3>Choose Promotion Piece</h3>
+            <div className="promo-choices">
+              {[
+                { piece: 'q', sym: chess.turn() === 'w' ? '♕' : '♛', label: 'Queen'  },
+                { piece: 'r', sym: chess.turn() === 'w' ? '♖' : '♜', label: 'Rook'   },
+                { piece: 'b', sym: chess.turn() === 'w' ? '♗' : '♝', label: 'Bishop' },
+                { piece: 'n', sym: chess.turn() === 'w' ? '♘' : '♞', label: 'Knight' },
+              ].map(({ piece, sym, label }) => (
+                <button key={piece} className="promo-btn" onClick={() => handlePromotion(piece)}>
+                  <span className="promo-sym">{sym}</span>
+                  <span className="promo-lbl">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─ Resign confirmation ───────────────────────────────────────── */}
       {showResignConfirm && (
