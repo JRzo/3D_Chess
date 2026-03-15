@@ -16,7 +16,7 @@ const gameSchema = new mongoose.Schema({
   blackUsername: String,
   moves: [moveSchema],
   pgn: String,
-  fen: String,
+  fen: { type: String, default: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' },
   result: { type: String, enum: ['white', 'black', 'draw', 'ongoing'], default: 'ongoing' },
   resultReason: String,
   status: { type: String, enum: ['waiting', 'active', 'completed'], default: 'active' },
