@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Navbar } from '../components/Navbar';
 import api from '../lib/api';
 import { RANK_COLORS, RANK_ICONS, PUZZLES_KEY, GAUNTLET_KEY } from '../lib/constants';
+import { PUZZLES } from '../lib/puzzles';
 
 function getPuzzlesSolved() {
   try { return JSON.parse(localStorage.getItem(PUZZLES_KEY) || '[]').length; }
@@ -78,7 +79,7 @@ export function Home() {
             <div className="feature-card-body">
               <div className="feature-card-title">Puzzle Training</div>
               <div className="feature-card-desc">Solve tactical puzzles to earn XP and sharpen your skills.</div>
-              <div className="feature-card-progress">{puzzlesSolved} / 8 solved</div>
+              <div className="feature-card-progress">{puzzlesSolved} / {PUZZLES.length} solved</div>
             </div>
             <span className="feature-card-arrow">→</span>
           </button>
@@ -122,15 +123,20 @@ export function Home() {
           <div className="panel">
             <h3>🕐 Recent Games</h3>
             <div className="games-list">
-              {recentGames.map(g => (
-                <div key={g._id} className="game-row">
-                  <span className="game-vs">{g.whiteUsername} vs {g.blackUsername || 'AI'}</span>
-                  <span className={`game-result res-${g.result}`}>
-                    {g.result === 'white' ? 'White wins' : g.result === 'black' ? 'Black wins' : g.result === 'draw' ? 'Draw' : g.result}
-                  </span>
-                  {g.resultReason && <span className="game-reason">{g.resultReason}</span>}
-                </div>
-              ))}
+              {recentGames.slice(0, 10).map(g => {
+                const userColor = g.white?.toString() === user?._id?.toString() ? 'white' : 'black';
+                const resultLabel =
+                  g.result === 'draw' ? 'Draw' :
+                  g.result === userColor ? 'Win' : 'Loss';
+                const resCls = g.result === 'draw' ? 'draw' : g.result === userColor ? 'win' : 'loss';
+                return (
+                  <div key={g._id} className="game-row">
+                    <span className="game-vs">{g.whiteUsername} vs {g.blackUsername || 'AI'}</span>
+                    <span className={`game-result res-${resCls}`}>{resultLabel}</span>
+                    {g.resultReason && <span className="game-reason">{g.resultReason}</span>}
+                  </div>
+                );
+              })}
               {recentGames.length === 0 && <p className="empty">No games yet. Start playing!</p>}
             </div>
           </div>

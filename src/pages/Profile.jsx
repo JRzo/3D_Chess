@@ -100,7 +100,7 @@ export function Profile() {
 
           <div className="profile-section">
             <h3>🕐 Game History</h3>
-            {games.length > 0 ? games.map(g => {
+            {games.length > 0 ? games.slice(0, 10).map(g => {
               const iw = g.white?.toString() === id;
               const won = (g.result === 'white' && iw) || (g.result === 'black' && !iw);
               const drew = g.result === 'draw';

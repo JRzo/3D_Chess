@@ -28,7 +28,7 @@ router.get('/user/:userId', async (req, res) => {
     const games = await Game.find({
       $or: [{ white: req.params.userId }, { black: req.params.userId }],
       status: 'completed',
-    }).sort({ completedAt: -1 }).limit(20);
+    }).sort({ completedAt: -1 }).limit(10);
     res.json(games);
   } catch (err) {
     res.status(500).json({ message: err.message });
