@@ -167,6 +167,16 @@ export function GamePage() {
     return detectOpening(history.map(m => m.san));
   }, [history]);
 
+  // ── Cleanup all timers/timeouts on unmount ───────────────────────────
+  useEffect(() => {
+    return () => {
+      clearTimeout(botTimeout.current);
+      clearTimeout(hintTimer.current);
+      clearTimeout(saveErrorTimer.current);
+      clearInterval(timerRef.current);
+    };
+  }, []);
+
   // ── Move history auto-scroll ─────────────────────────────────────────
   useEffect(() => {
     if (moveHistRef.current) {

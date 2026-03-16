@@ -1,14 +1,37 @@
 import express from 'express';
 import { isValidObjectId } from 'mongoose';
 import { Chess } from 'chess.js';
+import rateLimit from 'express-rate-limit';
 import Game from '../models/Game.js';
 import User from '../models/User.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// 30 requests per minute for read-heavy game history endpoints
+const readLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please slow down' },
+});
+
+// 60 move submissions per minute per IP
+const moveLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many move requests, please slow down' },
+});
+
 const STARTING_FEN   = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-const VALID_RESULTS  = new Set(['white', 'black', 'draw']);
+const VALID_RESULTS       = new Set(['white', 'black', 'draw']);
+const VALID_RESULT_REASONS = new Set([
+  'checkmate', 'stalemate', 'resignation', 'timeout',
+  'draw', 'insufficient', 'repetition', 'fifty-move',
+]);
 const SQUARE_RE      = /^[a-h][1-8]$/;
 const PROMO_RE       = /^[qrbn]$/;
 const VALID_TIME_CONTROLS = new Set([60, 120, 180, 300, 600, 900, 1800, 0]);
@@ -46,7 +69,7 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-router.get('/user/:userId', async (req, res) => {
+router.get('/user/:userId', authenticate, readLimit, async (req, res) => {
   try {
     if (!isValidObjectId(req.params.userId))
       return res.status(400).json({ message: 'Invalid user ID' });
@@ -62,13 +85,21 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id))
       return res.status(400).json({ message: 'Invalid game ID' });
 
     const game = await Game.findById(req.params.id);
     if (!game) return res.status(404).json({ message: 'Game not found' });
+
+    // Verify requester is a participant in the game
+    const isParticipant =
+      game.white?.toString() === req.userId ||
+      game.black?.toString() === req.userId;
+    if (!isParticipant)
+      return res.status(403).json({ message: 'Forbidden' });
+
     res.json(game);
   } catch (err) {
     console.error('GET /games/:id error:', err);
@@ -76,7 +107,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/:id/moves', authenticate, async (req, res) => {
+router.post('/:id/moves', authenticate, moveLimit, async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id))
       return res.status(400).json({ message: 'Invalid game ID' });
@@ -224,11 +255,17 @@ router.post('/:id/complete', authenticate, async (req, res) => {
     if (!VALID_RESULTS.has(result))
       return res.status(400).json({ message: 'Invalid result value' });
 
-    if (resultReason !== undefined && (typeof resultReason !== 'string' || resultReason.length > 50))
+    if (resultReason !== undefined && !VALID_RESULT_REASONS.has(resultReason))
       return res.status(400).json({ message: 'Invalid resultReason' });
 
-    if (pgn !== undefined && (typeof pgn !== 'string' || pgn.length > 5000))
-      return res.status(400).json({ message: 'Invalid PGN' });
+    if (pgn !== undefined) {
+      if (typeof pgn !== 'string' || pgn.length > 5000)
+        return res.status(400).json({ message: 'Invalid PGN' });
+      // Strip characters outside the PGN-safe set to prevent XSS if ever rendered
+      // Allowed: alphanumeric, space, common PGN punctuation and notation chars
+      if (!/^[\w\s\-\.\+\#\=\!\?\*\[\]\(\)\{\}\/\\:;,'"@<>0-9]*$/.test(pgn))
+        return res.status(400).json({ message: 'PGN contains disallowed characters' });
+    }
 
     const safeBotLevel = Number.isInteger(botLevel) && botLevel >= 0 && botLevel <= 5 ? botLevel : 0;
 
