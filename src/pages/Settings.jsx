@@ -8,9 +8,18 @@ import api from '../lib/api';
 const AVATARS = ['♟','♞','♜','♛','♚','♝','⚔','🏆','👑','⭐','🔥','💎'];
 
 const BOARD_STYLES = [
-  { key: 'wood',   label: 'Wood',   preview: '🟫', desc: 'Classic warm wood tones' },
-  { key: 'marble', label: 'Marble', preview: '⬜', desc: 'Elegant marble finish' },
+  { key: 'wood',   label: 'Wood',   preview: '🟫', desc: 'Classic warm wood' },
+  { key: 'marble', label: 'Marble', preview: '⬜', desc: 'Elegant marble' },
   { key: 'neon',   label: 'Neon',   preview: '🟦', desc: 'Vibrant neon glow' },
+];
+
+const PIECE_COLORS = [
+  { key: 'classic',  label: 'Classic',  w: '#f2ede0', b: '#231f1a', desc: 'Ivory & ebony' },
+  { key: 'walnut',   label: 'Walnut',   w: '#d4a04c', b: '#5c2e0e', desc: 'Gold & mahogany' },
+  { key: 'crystal',  label: 'Crystal',  w: '#c8e8ff', b: '#1840b0', desc: 'Ice & deep blue' },
+  { key: 'royal',    label: 'Royal',    w: '#f0deff', b: '#4a0f8a', desc: 'Lavender & violet' },
+  { key: 'obsidian', label: 'Obsidian', w: '#a8b4c8', b: '#1a1f28', desc: 'Silver & jet black' },
+  { key: 'gold',     label: 'Gold',     w: '#ffd700', b: '#8b1a00', desc: 'Gold & crimson' },
 ];
 
 export function Settings() {
@@ -21,15 +30,16 @@ export function Settings() {
     bio: user?.bio || '',
     avatar: user?.avatar || '♟',
     settings: {
-      soundEnabled:  user?.settings?.soundEnabled  ?? true,
-      musicEnabled:  user?.settings?.musicEnabled  ?? false,
-      theme:         user?.settings?.theme         || 'dark',
-      boardStyle:    user?.settings?.boardStyle    || 'wood',
-      showTutorial:  user?.settings?.showTutorial  ?? true,
+      soundEnabled:      user?.settings?.soundEnabled      ?? true,
+      musicEnabled:      user?.settings?.musicEnabled      ?? false,
+      theme:             user?.settings?.theme             || 'dark',
+      boardStyle:        user?.settings?.boardStyle        || 'wood',
+      pieceColorScheme:  user?.settings?.pieceColorScheme  || 'classic',
+      showTutorial:      user?.settings?.showTutorial      ?? true,
     },
   });
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
+  const [saved, setSaved]   = useState(false);
+  const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -59,13 +69,13 @@ export function Settings() {
       <div className="settings-page">
         <h2>⚙ Settings</h2>
 
+        {/* ── Profile ────────────────────────────────────────── */}
         <section className="settings-section">
           <h3>Profile</h3>
           <div className="form-group">
             <label>Username <span className="form-char-count">{form.username.length}/20</span></label>
             <input
-              value={form.username}
-              maxLength={20}
+              value={form.username} maxLength={20}
               onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
               placeholder="Your display name"
             />
@@ -73,10 +83,8 @@ export function Settings() {
           <div className="form-group">
             <label>Bio <span className="form-char-count">{form.bio.length}/160</span></label>
             <textarea
-              rows={3}
-              placeholder="Say something about yourself…"
-              value={form.bio}
-              maxLength={160}
+              rows={3} placeholder="Say something about yourself…"
+              value={form.bio} maxLength={160}
               onChange={e => setForm(f => ({ ...f, bio: e.target.value }))}
             />
           </div>
@@ -94,6 +102,7 @@ export function Settings() {
           </div>
         </section>
 
+        {/* ── Audio ─────────────────────────────────────────── */}
         <section className="settings-section">
           <h3>Audio</h3>
           {[['soundEnabled','🔊 Sound Effects'],['musicEnabled','🎵 Background Music']].map(([k, label]) => (
@@ -107,8 +116,10 @@ export function Settings() {
           ))}
         </section>
 
+        {/* ── Appearance ────────────────────────────────────── */}
         <section className="settings-section">
           <h3>Appearance</h3>
+
           <div className="form-group">
             <label>Board Style</label>
             <div className="board-style-picker">
@@ -125,8 +136,29 @@ export function Settings() {
               ))}
             </div>
           </div>
+
+          <div className="form-group" style={{ marginTop: '14px' }}>
+            <label>Piece Colors</label>
+            <div className="piece-color-picker">
+              {PIECE_COLORS.map(c => (
+                <button
+                  key={c.key}
+                  className={`piece-color-opt ${form.settings.pieceColorScheme === c.key ? 'piece-color-active' : ''}`}
+                  onClick={() => setS('pieceColorScheme', c.key)}
+                >
+                  <div className="piece-color-swatch">
+                    <span className="piece-color-w" style={{ color: c.w }}>♟</span>
+                    <span className="piece-color-b" style={{ color: c.b }}>♟</span>
+                  </div>
+                  <span className="piece-color-label">{c.label}</span>
+                  <span className="piece-color-desc">{c.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </section>
 
+        {/* ── Game ──────────────────────────────────────────── */}
         <section className="settings-section">
           <h3>Game</h3>
           <div className="toggle-row">

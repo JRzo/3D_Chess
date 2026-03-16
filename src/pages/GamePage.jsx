@@ -715,6 +715,7 @@ export function GamePage() {
               turn={turn}
               hintMove={isReviewing ? null : hintMove}
               boardStyle={user?.settings?.boardStyle || 'wood'}
+              pieceColorScheme={user?.settings?.pieceColorScheme || 'classic'}
               flipped={flipped}
             />
             <OrbitControls enablePan={false} minDistance={7} maxDistance={26} maxPolarAngle={Math.PI / 2.1} />

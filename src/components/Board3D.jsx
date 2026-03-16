@@ -5,7 +5,6 @@ import { ChessPiece3D } from './ChessPiece3D';
 const FILES = ['a','b','c','d','e','f','g','h'];
 const RANKS = ['1','2','3','4','5','6','7','8'];
 
-// Board colour themes: light square, dark square, board frame
 const THEMES = {
   wood: {
     light: '#f0d9b5', dark: '#b58863',
@@ -35,11 +34,12 @@ const THEMES = {
 
 export function Board3D({
   selectedSquare, validMoves, pieces, lastMove,
-  onSquareClick, isCheck, turn, hintMove, boardStyle = 'wood', flipped = false,
+  onSquareClick, isCheck, turn, hintMove,
+  boardStyle = 'wood', flipped = false, pieceColorScheme = 'classic',
 }) {
   const theme = THEMES[boardStyle] || THEMES.wood;
+  const isNeon = boardStyle === 'neon';
 
-  // Map col/row to 3D x/z, accounting for flip
   const toPos = (col, row) => flipped
     ? [3.5 - col, 0.02, 3.5 - row]
     : [col - 3.5, 0.02, row - 3.5];
@@ -48,13 +48,13 @@ export function Board3D({
     return FILES.flatMap((file, col) =>
       RANKS.map((rank, row) => {
         const square = file + rank;
-        const isLight     = (col + row) % 2 === 0;
-        const isSelected  = square === selectedSquare;
-        const isValid     = validMoves.includes(square);
-        const isLastFrom  = lastMove?.from === square;
-        const isLastTo    = lastMove?.to   === square;
-        const isHintFrom  = hintMove?.from === square;
-        const isHintTo    = hintMove?.to   === square;
+        const isLight    = (col + row) % 2 === 0;
+        const isSelected = square === selectedSquare;
+        const isValid    = validMoves.includes(square);
+        const isLastFrom = lastMove?.from === square;
+        const isLastTo   = lastMove?.to   === square;
+        const isHintFrom = hintMove?.from === square;
+        const isHintTo   = hintMove?.to   === square;
 
         let color = isLight ? theme.light : theme.dark;
         if (isSelected)                   color = theme.selected;
@@ -69,11 +69,11 @@ export function Board3D({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSquare, validMoves, lastMove, hintMove, theme, flipped]);
 
-  const isNeon = boardStyle === 'neon';
-
-  // Labels: when flipped, h→a and 8→1
   const fileLabels = flipped ? [...FILES].reverse() : FILES;
   const rankLabels = flipped ? [...RANKS].reverse() : RANKS;
+
+  // Build a Set of occupied squares for shadow disc rendering
+  const occupiedSquares = useMemo(() => new Set(pieces.map(p => p.square)), [pieces]);
 
   return (
     <group>
@@ -103,6 +103,19 @@ export function Board3D({
                 emissiveIntensity={isNeon ? 0.15 : 0}
               />
             </mesh>
+
+            {/* Contact shadow disc under each piece */}
+            {occupiedSquares.has(square) && (
+              <mesh position={[px, 0.025, pz]} rotation={[-Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[0.36, 20]} />
+                <meshStandardMaterial
+                  color="#000000"
+                  transparent
+                  opacity={isNeon ? 0.25 : 0.13}
+                  depthWrite={false}
+                />
+              </mesh>
+            )}
 
             {/* Valid-move dot */}
             {isValid && (
@@ -160,11 +173,12 @@ export function Board3D({
             inCheck={isKingInCheck}
             onClick={e => { e.stopPropagation(); onSquareClick(square); }}
             neon={isNeon}
+            colorScheme={pieceColorScheme}
           />
         );
       })}
 
-      {/* Rank / file labels */}
+      {/* Labels */}
       {fileLabels.map((f, i) => (
         <Html key={`f${f}`} position={[i - 3.5, 0.06, -4.6]} center>
           <span style={{ color: theme.label, fontSize: '11px', fontWeight: '700', userSelect: 'none' }}>{f}</span>

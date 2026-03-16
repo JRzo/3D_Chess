@@ -9,6 +9,7 @@ const USERNAME_RE   = /^[a-zA-Z0-9_]{3,20}$/;
 const ALLOWED_AVATARS = new Set(['♟','♞','♜','♛','♚','♝','⚔','🏆','👑','⭐','🔥','💎','🎯','🐉','🦁','🌟']);
 const ALLOWED_THEMES  = new Set(['dark', 'light']);
 const ALLOWED_BOARDS  = new Set(['wood', 'marble', 'neon']);
+const ALLOWED_PIECE_COLORS = new Set(['classic','walnut','crystal','royal','obsidian','gold']);
 
 router.get('/', async (req, res) => {
   try {
@@ -79,6 +80,11 @@ router.put('/me', authenticate, async (req, res) => {
         if (!ALLOWED_BOARDS.has(settings.boardStyle))
           return res.status(400).json({ message: 'Invalid board style' });
         s.boardStyle = settings.boardStyle;
+      }
+      if (settings.pieceColorScheme !== undefined) {
+        if (!ALLOWED_PIECE_COLORS.has(settings.pieceColorScheme))
+          return res.status(400).json({ message: 'Invalid piece color scheme' });
+        s.pieceColorScheme = settings.pieceColorScheme;
       }
       if (settings.showTutorial !== undefined) s.showTutorial = Boolean(settings.showTutorial);
       update.settings = { ...s };
