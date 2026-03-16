@@ -33,6 +33,15 @@ const authLimiter = rateLimit({
   message: { message: 'Too many attempts, please try again later' },
 });
 
+// 60 requests per minute — guards /auth/me and /auth/logout
+const meLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please slow down' },
+});
+
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -121,12 +130,17 @@ router.post('/login', authLimiter, async (req, res) => {
   }
 });
 
-router.post('/logout', (req, res) => {
-  res.clearCookie('chess3d-token', { path: '/' });
+router.post('/logout', meLimit, (req, res) => {
+  res.clearCookie('chess3d-token', {
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: IS_PROD ? 'strict' : 'lax',
+    path: '/',
+  });
   res.json({ message: 'Logged out' });
 });
 
-router.get('/me', async (req, res) => {
+router.get('/me', meLimit, async (req, res) => {
   try {
     const token = req.cookies?.['chess3d-token']
       || req.headers.authorization?.split(' ')[1];

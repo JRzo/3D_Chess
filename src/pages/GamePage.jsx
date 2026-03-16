@@ -167,6 +167,16 @@ export function GamePage() {
     return detectOpening(history.map(m => m.san));
   }, [history]);
 
+  // ── Cleanup all timers/timeouts on unmount ───────────────────────────
+  useEffect(() => {
+    return () => {
+      clearTimeout(botTimeout.current);
+      clearTimeout(hintTimer.current);
+      clearTimeout(saveErrorTimer.current);
+      clearInterval(timerRef.current);
+    };
+  }, []);
+
   // ── Move history auto-scroll ─────────────────────────────────────────
   useEffect(() => {
     if (moveHistRef.current) {
@@ -715,6 +725,7 @@ export function GamePage() {
               turn={turn}
               hintMove={isReviewing ? null : hintMove}
               boardStyle={user?.settings?.boardStyle || 'wood'}
+              pieceColorScheme={user?.settings?.pieceColorScheme || 'classic'}
               flipped={flipped}
             />
             <OrbitControls enablePan={false} minDistance={7} maxDistance={26} maxPolarAngle={Math.PI / 2.1} />

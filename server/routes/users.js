@@ -1,16 +1,36 @@
 import express from 'express';
 import { isValidObjectId } from 'mongoose';
+import rateLimit from 'express-rate-limit';
 import User from '../models/User.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// 30 requests per minute for leaderboard / game-history reads
+const readLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please slow down' },
+});
+
+// 5 puzzle-solved submissions per minute — prevents streak inflation via rapid replay
+const puzzleLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many puzzle submissions, please slow down' },
+});
+
 const USERNAME_RE   = /^[a-zA-Z0-9_]{3,20}$/;
 const ALLOWED_AVATARS = new Set(['♟','♞','♜','♛','♚','♝','⚔','🏆','👑','⭐','🔥','💎','🎯','🐉','🦁','🌟']);
 const ALLOWED_THEMES  = new Set(['dark', 'light']);
 const ALLOWED_BOARDS  = new Set(['wood', 'marble', 'neon']);
+const ALLOWED_PIECE_COLORS = new Set(['classic','walnut','crystal','royal','obsidian','gold']);
 
-router.get('/', async (req, res) => {
+router.get('/', readLimit, async (req, res) => {
   try {
     const users = await User.find()
       .select('username stats avatar elo currentWinStreak bestWinStreak createdAt')
@@ -54,7 +74,14 @@ router.put('/me', authenticate, async (req, res) => {
     if (bio !== undefined) {
       if (typeof bio !== 'string' || bio.length > 160)
         return res.status(400).json({ message: 'Bio must be 160 characters or fewer' });
-      update.bio = bio.trim();
+      // Strip HTML tags/entities to prevent stored XSS if bio is ever rendered as HTML
+      const stripped = bio.trim()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+      update.bio = stripped;
     }
 
     if (avatar !== undefined) {
@@ -80,6 +107,11 @@ router.put('/me', authenticate, async (req, res) => {
           return res.status(400).json({ message: 'Invalid board style' });
         s.boardStyle = settings.boardStyle;
       }
+      if (settings.pieceColorScheme !== undefined) {
+        if (!ALLOWED_PIECE_COLORS.has(settings.pieceColorScheme))
+          return res.status(400).json({ message: 'Invalid piece color scheme' });
+        s.pieceColorScheme = settings.pieceColorScheme;
+      }
       if (settings.showTutorial !== undefined) s.showTutorial = Boolean(settings.showTutorial);
       update.settings = { ...s };
     }
@@ -97,7 +129,7 @@ router.put('/me', authenticate, async (req, res) => {
 });
 
 // POST /users/me/puzzle-solved — record daily puzzle streak
-router.post('/me/puzzle-solved', authenticate, async (req, res) => {
+router.post('/me/puzzle-solved', authenticate, puzzleLimit, async (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
     const user = await User.findById(req.userId);

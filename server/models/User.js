@@ -22,6 +22,7 @@ const userSchema = new mongoose.Schema({
     theme: { type: String, default: 'dark' },
     pieceStyle: { type: String, default: 'classic' },
     boardStyle: { type: String, default: 'wood' },
+    pieceColorScheme: { type: String, default: 'classic' },
     showTutorial: { type: Boolean, default: true },
   },
   elo: { type: Number, default: 1200 },
